@@ -29,3 +29,9 @@ paper_parse:
     model: "glm-ocr"
     prompt: "Text Recognition:"
     timeout_seconds: 120
+
+paper_activity:
+  db_path: data/papers.db
+  table_name: activity
+  cli:
+    default_limit: 100
