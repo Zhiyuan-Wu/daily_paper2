@@ -1,0 +1,31 @@
+paper_fetch:
+  db_path: data/papers.db
+  papers_dir: data/papers
+  max_downloaded_papers: 100
+  sources:
+    arxiv:
+      timeout_seconds: 30
+      default_query: "all:machine learning"
+      default_search_limit: 20
+      max_results_multiplier: 3
+      download_chunk_size: 65536
+    huggingface:
+      timeout_seconds: 30
+      use_proxy: true
+      proxy_url: "http://localhost:7890"
+      default_search_limit: 20
+      download_chunk_size: 65536
+  cli:
+    default_online_limit: 20
+    default_local_limit: 100
+
+paper_parse:
+  db_path: data/papers.db
+  parsed_dir: data/parsed
+  pdf:
+    dpi: 200
+  ollama:
+    endpoint: "http://localhost:11434/api/chat"
+    model: "glm-ocr"
+    prompt: "Text Recognition:"
+    timeout_seconds: 120
