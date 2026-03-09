@@ -131,3 +131,49 @@ def test_download_prefers_local_cache_unless_force_refresh(tmp_path: Path) -> No
     third = fetch.download_paper("dummy:cache-1", force_refresh=True)
     assert third.local_pdf_path == first.local_pdf_path
     assert dummy.download_calls == 2
+
+
+def test_search_online_does_not_overwrite_existing_rows(tmp_path: Path) -> None:
+    fetch = PaperFetch(
+        db_path=tmp_path / "papers.db",
+        papers_dir=tmp_path / "papers",
+        max_downloaded_papers=10,
+    )
+
+    dummy = DummySource()
+    fetch.register_source(dummy)
+
+    original = PaperMetadata(
+        id="dummy:stable-1",
+        source="dummy",
+        source_id="stable-1",
+        title="Original Title",
+        authors=["Alice"],
+        published_at=datetime(2026, 3, 1, 10, 0, 0),
+        abstract="original abstract",
+        online_url="https://example.org/paper/stable-1",
+    )
+    dummy._items["stable-1"] = original
+    fetch.search_online(source="dummy", limit=5)
+
+    downloaded = fetch.download_paper("dummy:stable-1")
+    assert downloaded.local_pdf_path is not None
+
+    changed_online = PaperMetadata(
+        id="dummy:stable-1",
+        source="dummy",
+        source_id="stable-1",
+        title="Changed Online Title",
+        authors=["Alice", "Bob"],
+        published_at=datetime(2026, 3, 2, 10, 0, 0),
+        abstract="changed abstract",
+        online_url="https://example.org/paper/stable-1-v2",
+    )
+    dummy._items["stable-1"] = changed_online
+    fetch.search_online(source="dummy", limit=5)
+
+    persisted = fetch.repo.get_by_id("dummy:stable-1")
+    assert persisted is not None
+    assert persisted.title == "Original Title"
+    assert persisted.abstract == "original abstract"
+    assert persisted.local_pdf_path == downloaded.local_pdf_path

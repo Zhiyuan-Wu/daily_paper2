@@ -144,8 +144,8 @@ class PaperFetch:
             **source_kwargs,
         )
 
-        # Every online query is stored so later local search/download can reuse it.
-        self.repo.upsert_papers(papers)
+        # Online search only inserts missing rows, never mutates existing local records.
+        self.repo.insert_papers_if_missing(papers)
         return papers
 
     def download_paper(

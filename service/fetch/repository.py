@@ -112,6 +112,39 @@ class PaperRepository:
                     ),
                 )
 
+    def insert_papers_if_missing(self, papers: list[PaperMetadata]) -> None:
+        """Insert metadata entries only when they do not already exist."""
+        if not papers:
+            return
+        with self._conn() as conn:
+            for paper in papers:
+                row = paper.to_db_row()
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO papers (
+                        id, source, source_id, title, authors, published_at, fetched_at,
+                        abstract, online_url, pdf_url, local_pdf_path, extra,
+                        last_accessed_at, downloaded_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["source"],
+                        row["source_id"],
+                        row["title"],
+                        json.dumps(row["authors"], ensure_ascii=False),
+                        row["published_at"],
+                        row["fetched_at"],
+                        row["abstract"],
+                        row["online_url"],
+                        row["pdf_url"],
+                        row["local_pdf_path"],
+                        json.dumps(row["extra"], ensure_ascii=False),
+                        row["last_accessed_at"],
+                        row["downloaded_at"],
+                    ),
+                )
+
     def get_by_id(self, paper_id: str) -> PaperMetadata | None:
         """Get one paper by internal ``id``."""
         with self._conn() as conn:

@@ -65,7 +65,7 @@ paper_fetch:
 - pdf目录: `data/papers/`
 
 行为：
-- 在线查询结果会自动 upsert 到 sqlite。
+- 在线查询结果会自动写入 sqlite，但只插入不存在的条目，不会改写已有条目。
 - 下载后更新本地路径与时间戳。
 - 下载默认优先使用本地缓存；仅在 `force_refresh=True`（或 CLI `--force-refresh`）时强制重新下载。
 - 若目标目录已有目标文件（同名 pdf），默认不会重复下载。
