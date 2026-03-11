@@ -28,10 +28,17 @@ paper_parse:
     endpoint: "http://localhost:11434/api/chat"
     model: "glm-ocr"
     prompt: "Text Recognition:"
-    timeout_seconds: 120
+    timeout_seconds: 300
 
 paper_activity:
   db_path: data/papers.db
   table_name: activity
+  cli:
+    default_limit: 100
+
+paper_report:
+  db_path: data/papers.db
+  table_name: report
+  reports_dir: data/reports
   cli:
     default_limit: 100

@@ -6,8 +6,10 @@
 2. 下载一篇论文到本地
 3. 解析已下载论文为 markdown 文本（PaperParser）
 4. 查询本地元信息
-5. Hugging Face 指定日期查询（使用配置中的代理）
-6. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
+5. 创建一条日报记录（DailyReportManager）
+6. 查询某日的日报记录
+7. Hugging Face 指定日期查询（使用配置中的代理）
+8. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from typing import Iterable
 from models.paper import PaperMetadata
 from service.fetch import PaperFetch
 from service.parse import PaperParser
+from service.report_management import DailyReportManager
 
 
 def paper_to_dict(paper: PaperMetadata) -> dict:
@@ -46,6 +49,7 @@ def main() -> None:
     """运行端到端演示流程。"""
     fetch = PaperFetch()  # 默认读取根目录 config.yaml
     parser = PaperParser()  # 默认读取根目录 config.yaml
+    report_manager = DailyReportManager()  # 默认读取根目录 config.yaml
 
     # 1) 在线查询 arXiv（带扩展字段 category）。
     arxiv_results = fetch.search_online(
@@ -59,6 +63,7 @@ def main() -> None:
     print_papers("arXiv Online Search", arxiv_results)
 
     # 2) 下载第一篇论文，并打印本地路径。
+    downloaded: PaperMetadata | None = None
     if arxiv_results:
         downloaded = fetch.download_paper(arxiv_results[0].id)
         print("\nDownloaded:")
@@ -76,7 +81,33 @@ def main() -> None:
     local_results = fetch.query_local(source="arxiv", has_pdf=True, limit=5)
     print_papers("Local Metadata (arXiv + has_pdf=true)", local_results, limit=5)
 
-    # 4) Hugging Face 指定日期查询（依赖代理可用性）。
+    # 4) 生成一条日报记录，关联当前本地查询到的论文。
+    report_date = datetime.now().date().isoformat()
+    report_id = f"daily-{report_date}"
+    related_ids = [paper.id for paper in local_results[:3]]
+    if downloaded and downloaded.id not in related_ids:
+        related_ids.insert(0, downloaded.id)
+
+    report_record = report_manager.create_report(
+        report_id=report_id,
+        report_date=report_date,
+        related_paper_ids=related_ids,
+        local_md_path=f"data/reports/{report_id}.md",
+        overwrite=True,
+    )
+    print("\nDaily Report Created:")
+    print(f"  id={report_record.id}")
+    print(f"  report_date={report_record.report_date}")
+    print(f"  generated_at={report_record.generated_at}")
+    print(f"  related_paper_ids={report_record.related_paper_ids}")
+    print(f"  local_md_path={report_record.local_md_path}")
+
+    report_rows = report_manager.list_reports(limit=3, report_date=report_date)
+    print(f"\nDaily Reports ({report_date}): {len(report_rows)}")
+    for idx, item in enumerate(report_rows, start=1):
+        print(f"  [{idx}] id={item.id} papers={len(item.related_paper_ids)} path={item.local_md_path}")
+
+    # 5) Hugging Face 指定日期查询（依赖代理可用性）。
     try:
         hf_results = fetch.search_online(
             source="huggingface",
@@ -87,7 +118,7 @@ def main() -> None:
         )
         print_papers("HuggingFace Daily Papers", hf_results)
 
-        # 5) 下载第一篇 HuggingFace 论文（若已缓存，则不会重复下载）。
+        # 6) 下载第一篇 HuggingFace 论文（若已缓存，则不会重复下载）。
         if hf_results:
             hf_downloaded = fetch.download_paper(hf_results[0].id)
             print("\nHuggingFace Downloaded:")
