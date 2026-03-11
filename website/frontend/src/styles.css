@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  --bg-gradient: radial-gradient(110% 90% at 20% 5%, #fef9ec 0%, #f5f9ff 46%, #f4fbf7 100%);
+  --panel-bg: rgba(255, 255, 255, 0.78);
+  --panel-border: rgba(16, 24, 40, 0.08);
+  --text-main: #17212b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--text-main);
+  background: var(--bg-gradient);
+  font-family: 'IBM Plex Sans', 'PingFang SC', sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-sider {
+  border-right: 1px solid var(--panel-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 251, 242, 0.66));
+}
+
+.side-brand {
+  height: 64px;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: #145ca8;
+}
+
+.app-header {
+  background: transparent;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.desktop-header {
+  height: 24px;
+  line-height: 24px;
+  border-bottom: 0;
+}
+
+.mobile-header {
+  height: 64px;
+  line-height: 64px;
+  padding-inline: 12px;
+}
+
+.app-content {
+  padding: 16px;
+}
+
+.app-content > * {
+  max-width: 1440px;
+}
+
+.ant-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(8px);
+}
+
+.markdown-panel {
+  line-height: 1.72;
+}
+
+.markdown-panel pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.markdown-panel table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.markdown-panel table th,
+.markdown-panel table td {
+  border: 1px solid #d0d8e2;
+  padding: 6px 10px;
+}
+
+@media (max-width: 1023px) {
+  .app-content {
+    padding: 12px;
+  }
+}

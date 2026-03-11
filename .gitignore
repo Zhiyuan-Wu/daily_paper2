@@ -9,3 +9,5 @@ data
 .DS_Store
 .idea
 .vscode
+website/frontend/node_modules
+website/frontend/dist
