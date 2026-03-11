@@ -1,85 +1,144 @@
 ---
 name: paper-recommand
-description: A SOP workflow to fetch latest acdamic paper and generate a report. 
+description: Generate today's daily paper report with fetch+parse workflow, persist report metadata to sqlite report table, and clean temporary workspace.
 metadata:
   {
     "openclaw": { "emoji": "🗒️", "requires": {} },
   }
 ---
 
-# Daily Paper Briefing Workflow
+# Daily Paper Report Workflow
 
-**Objective:** Execute a complete research briefing cycle via daily_paper2 CLI: fetch recent metadata, generate a market overview, select the most relevant paper based on user interests, perform deep text analysis, and compile a final Chinese report.
+Objective: build a complete daily report, store final markdown in `data/reports/` with today's date, create a `report` table row via CLI, and remove temp files.
 
-**Prerequisites:**
-- **Local CLI Working Directory:** `~/.openclaw/workspace/daily_paper2`
-- **Environment:** `source .venv/bin/activate`
-- **User Interest:** Infer user interests from conversation history (e.g., *Deep Learning, Large Language Models, Agents*) or use default keywords if history is unavailable.
-
-## Workflow
-
-#### Step 1: Fetch Recent Metadata (Last 7 Days)
-Retrieve paper metadata from the last 7 days. The output is saved as a JSON file containing titles, authors, and abstracts for subsequent analysis.
+## Prerequisites
 
 ```bash
-cd ~/.openclaw/workspace/daily_paper2 && \
-source .venv/bin/activate && \
+cd ~/.openclaw/workspace/daily_paper2
+source .venv/bin/activate
+```
+
+## Step 0: Initialize Runtime Variables and Temp Workspace
+
+```bash
+TODAY="$(python - <<'PY'
+from datetime import date
+print(date.today().isoformat())
+PY
+)"
+STAMP="$(python - <<'PY'
+from datetime import date
+print(date.today().strftime('%Y%m%d'))
+PY
+)"
+START_DATE="$(python - <<'PY'
+from datetime import date, timedelta
+print((date.today() - timedelta(days=7)).isoformat())
+PY
+)"
+
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/paper-recommand-${STAMP}-XXXXXX")"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+RAW_JSON="$TMP_DIR/raw_metadata_${STAMP}.json"
+OVERVIEW_MD="$TMP_DIR/daily_paper_overview_${STAMP}.md"
+DEEPDIVE_MD="$TMP_DIR/daily_paper_deepdive_${STAMP}.md"
+FINAL_MD="data/reports/daily_paper_${TODAY}.md"
+
+mkdir -p data/reports
+```
+
+## Step 1: Fetch Metadata (Last 7 Days)
+
+```bash
 python scripts/paper_fetch_cli.py search-online \
   --source arxiv \
-  --start-date $(date -d "7 days ago" +%Y-%m-%d) \
-  --end-date $(date +%Y-%m-%d) \
+  --start-date "$START_DATE" \
+  --end-date "$TODAY" \
   --keywords "Deep Learning,Large Language Models,Agent" \
   --limit 50 \
-  > raw_metadata_260310.json
+  > "$RAW_JSON"
 ```
 
-*(Note: Replace 260310 with current date to avoide overwrite history files)*
+## Step 2: Build Overview and Choose Target Paper
 
-#### Step 2: Generate Market Overview & Select Target
-**Action:** Analyzes `raw_metadata_260310.json` to summarize the landscape and identify the single most valuable paper for a deep dive based on your specific interests.
+Action:
+1. Read `$RAW_JSON`.
+2. Write overview markdown to `$OVERVIEW_MD`.
+3. In `$OVERVIEW_MD`, explicitly output:
+- `TARGET_PAPER_ID=<paper_id>`
+- `RELATED_PAPER_IDS=<id1,id2,id3,...>`
 
-*   **Output File:** `daily_paper_overview_260310.md`
-*   **Content Requirements:**
-    1.  **Theme Coverage:** What are the dominant topics in the last 7 days?
-    2.  **Key Works:** List 3-5 notable papers with brief descriptions.
-    3.  **Selection Decision:** Explicitly state the `paper_id` chosen for the "Deep Dive" and justify the choice.
+Required sections in `$OVERVIEW_MD`:
+1. Theme coverage in the past 7 days.
+2. 3-5 notable papers.
+3. Selection rationale for target paper.
 
-#### Step 3: Download & Parse the Selected Paper
-Execute the download and full-text extraction for the **single** `paper_id` selected in Step 2.
+## Step 3: Download and Parse Target Paper
 
-**Download PDF**
+Replace `<TARGET_PAPER_ID>` with the selected paper id.
+
 ```bash
-cd ~/.openclaw/workspace/daily_paper2 && \
-source .venv/bin/activate && \
-python scripts/paper_fetch_cli.py download <PAPER_ID>
+python scripts/paper_fetch_cli.py download <TARGET_PAPER_ID>
+python scripts/paper_parse_cli.py paper <TARGET_PAPER_ID>
 ```
-*(Replace `<PAPER_ID>` with the ID identified in Step 2, e.g., `arxiv:2403.12345`)*
 
-**Extract Full Text (OCR)**
-Convert the downloaded PDF into a structured Markdown file for analysis. This may take a few minutes.
+## Step 4: Deep Dive Analysis
+
+Action:
+1. Read parsed full text from `data/parsed/<TARGET_PAPER_ID>.md`.
+2. Write deep dive markdown to `$DEEPDIVE_MD`.
+
+Required sections in `$DEEPDIVE_MD`:
+1. Background and target problem.
+2. Limitations of prior work.
+3. Core motivation and method.
+4. Quantitative results and conclusion.
+
+## Step 5: Compose Final Daily Report
+
+Action: merge overview + deep dive into one final report markdown.
+
+Output path must be exactly:
+- `$FINAL_MD` (in `data/reports/` with today's date)
+
+Required structure:
+1. TL;DR (3 sentences)
+2. Today's overview
+3. Featured paper deep analysis
+
+## Step 6: Create Report Row in SQLite via Report CLI
+
+Rules:
+1. `report_id` must include today's date, example: `daily-2026-03-12`.
+2. `--report-date` must use `$TODAY`.
+3. `--local-md-path` must be `$FINAL_MD`.
+4. Pass `--paper-id` repeatedly for related papers (at least include target paper).
+
+Example command:
+
 ```bash
-cd ~/.openclaw/workspace/daily_paper2 && \
-source .venv/bin/activate && \
-python scripts/paper_parse_cli.py paper <PAPER_ID>
+python scripts/paper_report_cli.py create "daily-${TODAY}" \
+  --report-date "$TODAY" \
+  --generated-at "$(python - <<'PY'
+from datetime import datetime, timezone
+print(datetime.now(timezone.utc).isoformat())
+PY
+)" \
+  --paper-id <TARGET_PAPER_ID> \
+  --paper-id <RELATED_PAPER_ID_2> \
+  --paper-id <RELATED_PAPER_ID_3> \
+  --local-md-path "$FINAL_MD" \
+  --overwrite
 ```
-*Result:* A parsed markdown file is saved to `data/parsed/<PAPER_ID>.md`.
 
-#### Step 4: Deep Dive Analysis
-**Action:** Reads the full text from the parsed markdown file generated in Step 3.
+## Step 7: Cleanup Temp Workspace
 
-*   **Output File:** `daily_paper_deepdive_260310.md`
-*   **Content Requirements:**
-    1.  **Background & Problem:** What specific gap or challenge does this paper address?
-    2.  **Limitations of Prior Work:** What are the mainstream/baseline methods, and why do they fail in this context?
-    3.  **Motivation & Core Techniques:** What is the key insight? Describe the main architectural changes or algorithmic innovations.
-    4.  **Results & Conclusion:** What are the quantitative improvements? What is the final takeaway?
+```bash
+rm -rf "$TMP_DIR"
+trap - EXIT
+```
 
-#### Step 5: Compile & Deliver Final Report
-**Action:** Merge the insights from the Overview (Step 2) and the Deep Dive (Step 4) into a single, cohesive report.
-
-*   **Output File:** `daily_paper_final_260310.md`
-*   **Language:** **Chinese (Simplified)**
-*   **Structure:**
-    1.  **TL;DR:** A concise 3-sentence summary of the entire briefing.
-    2.  **今日论文概况 (Today's Overview):** Synthesized from `daily_paper_overview_260310.md`, covering trends and key mentions.
-    3.  **重点论文推荐 (Featured Paper Recommendation):** The detailed analysis from `daily_paper_deepdive_260310.md`, focusing on the selected paper.
+Deliverable:
+1. Final report file at `data/reports/daily_paper_<YYYY-MM-DD>.md`.
+2. One report row persisted in sqlite `report` table.
