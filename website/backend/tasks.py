@@ -234,7 +234,8 @@ class SkillCommandBuilder:
 
     def build_report_generation(self, report_date: str) -> tuple[list[str], dict[str, Any], str]:
         skill_path = self.skills_dir / "paper-recommand" / "SKILL.md"
-        command = self._build_claude_command(skill_path)
+        prompt = f"Today is {report_date}."
+        command = self._build_claude_command(skill_path, prompt)
         metadata = {
             "report_date": report_date,
             "skill_file_path": str(skill_path),
@@ -243,7 +244,8 @@ class SkillCommandBuilder:
 
     def build_paper_analysis(self, paper_id: str) -> tuple[list[str], dict[str, Any], str]:
         skill_path = self.skills_dir / "paper-analysis" / "SKILL.md"
-        command = self._build_claude_command(skill_path)
+        prompt = f"Target Paper is {paper_id}."
+        command = self._build_claude_command(skill_path, prompt)
         metadata = {
             "paper_id": paper_id,
             "skill_file_path": str(skill_path),
@@ -251,12 +253,12 @@ class SkillCommandBuilder:
         return command, metadata, "paper_analysis"
 
     @staticmethod
-    def _build_claude_command(skill_path: Path) -> list[str]:
+    def _build_claude_command(skill_path: Path, prompt: str = "") -> list[str]:
         if not skill_path.exists():
             raise FileNotFoundError(f"Skill file not found: {skill_path}")
 
-        prompt = f"execute workflow in {skill_path}"
-        return ["claude", "-p", prompt]
+        _prompt = f"Execute workflow in {skill_path}. {prompt}"
+        return ["claude", "-p", _prompt, "--permission-mode", "bypassPermissions"]
 
 
 def _utc_now() -> datetime:
