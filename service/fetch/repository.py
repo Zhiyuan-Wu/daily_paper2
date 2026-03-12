@@ -163,66 +163,6 @@ class PaperRepository:
                 return None
             return self._row_to_metadata(row)
 
-    def search_local(
-        self,
-        source: str | None = None,
-        keywords: list[str] | None = None,
-        start_date: datetime | None = None,
-        end_date: datetime | None = None,
-        has_pdf: bool | None = None,
-        limit: int | None = None,
-    ) -> list[PaperMetadata]:
-        """Search metadata in sqlite with optional filters.
-
-        Notes:
-            - Keyword filter is an ``AND`` relationship between keywords.
-            - Each keyword is matched against title OR abstract.
-        """
-        conditions: list[str] = []
-        params: list[object] = []
-
-        if source:
-            conditions.append("source = ?")
-            params.append(source)
-
-        if start_date:
-            conditions.append("published_at >= ?")
-            params.append(start_date.isoformat())
-
-        if end_date:
-            conditions.append("published_at <= ?")
-            params.append(end_date.isoformat())
-
-        if has_pdf is True:
-            conditions.append("local_pdf_path IS NOT NULL")
-        elif has_pdf is False:
-            conditions.append("local_pdf_path IS NULL")
-
-        if keywords:
-            for keyword in keywords:
-                conditions.append("(LOWER(title) LIKE ? OR LOWER(abstract) LIKE ?)")
-                pattern = f"%{keyword.lower()}%"
-                params.extend([pattern, pattern])
-
-        where = ""
-        if conditions:
-            where = "WHERE " + " AND ".join(conditions)
-
-        if limit is None:
-            raise ValueError("search_local requires explicit 'limit' from caller")
-
-        query = f"""
-            SELECT * FROM papers
-            {where}
-            ORDER BY COALESCE(published_at, fetched_at) DESC
-            LIMIT ?
-        """
-        params.append(limit)
-
-        with self._conn() as conn:
-            rows = conn.execute(query, params).fetchall()
-            return [self._row_to_metadata(row) for row in rows]
-
     def update_download_path(self, paper_id: str, local_path: str) -> None:
         """Store local file path and set download/access timestamps."""
         now = _utc_now().isoformat()

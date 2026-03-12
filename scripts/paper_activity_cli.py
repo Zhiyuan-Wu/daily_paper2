@@ -41,6 +41,7 @@ def _build_parser(config_path: str | Path) -> argparse.ArgumentParser:
     create_cmd.add_argument("--user-notes", default="")
     create_cmd.add_argument("--ai-report-summary", default="")
     create_cmd.add_argument("--ai-report-path", default="")
+    create_cmd.add_argument("--like", type=int, choices=[-1, 0, 1], default=0)
     create_cmd.add_argument("--overwrite", action="store_true")
 
     get_cmd = subparsers.add_parser("get", help="get one activity row")
@@ -56,6 +57,7 @@ def _build_parser(config_path: str | Path) -> argparse.ArgumentParser:
     update_cmd.add_argument("--user-notes")
     update_cmd.add_argument("--ai-report-summary")
     update_cmd.add_argument("--ai-report-path")
+    update_cmd.add_argument("--like", type=int, choices=[-1, 0, 1])
 
     append_cmd = subparsers.add_parser(
         "append-recommendation",
@@ -89,6 +91,7 @@ def main(argv: list[str] | None = None) -> None:
             user_notes=args.user_notes,
             ai_report_summary=args.ai_report_summary,
             ai_report_path=args.ai_report_path,
+            like=args.like,
             overwrite=args.overwrite,
         )
         print(json.dumps(manager.to_dict(created), ensure_ascii=False, indent=2))
@@ -112,6 +115,7 @@ def main(argv: list[str] | None = None) -> None:
             user_notes=args.user_notes,
             ai_report_summary=args.ai_report_summary,
             ai_report_path=args.ai_report_path,
+            like=args.like,
         )
         print(json.dumps(manager.to_dict(updated), ensure_ascii=False, indent=2))
         return

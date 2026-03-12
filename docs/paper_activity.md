@@ -8,6 +8,7 @@
 2. 每条记录通过 `id` 与其它论文表（如 `papers.id`）做逻辑关联。
 3. 提供完整 CRUD（创建、读取、更新、删除）能力。
 4. 同时支持 Python import 和 CLI 两种使用方式。
+5. 新增 `like` 字段，使用 `1/0/-1` 表示喜欢/无信息/不喜欢。
 
 该模块不依赖 `service/fetch` 或 `service/parse` 业务实现，仅复用统一的 sqlite 路径与配置风格。
 
@@ -25,6 +26,8 @@
    AI 精读摘要。
 5. `ai_report_path` (`TEXT`)  
    AI 精读完整报告路径。
+6. `like` (`INTEGER`)  
+   用户偏好，固定取值：`1`（喜欢）、`0`（无信息）、`-1`（不喜欢）。
 
 ## 3. 配置项（config.yaml）
 新增配置段：
@@ -68,6 +71,7 @@ record = manager.create_activity(
     user_notes="先读实验部分",
     ai_report_summary="提出了新的训练框架",
     ai_report_path="data/reports/2603.05500.md",
+    like=1,
 )
 ```
 
@@ -77,7 +81,8 @@ record = manager.create_activity(
 3. `user_notes`: 用户笔记（可选）
 4. `ai_report_summary`: AI 摘要（可选）
 5. `ai_report_path`: AI 报告路径（可选）
-6. `overwrite`: 是否覆盖同 id 记录（默认 `False`）
+6. `like`: 偏好值（`1/0/-1`，默认 `0`）
+7. `overwrite`: 是否覆盖同 id 记录（默认 `False`）
 
 ### 4.3 查询/列表
 ```python
@@ -91,6 +96,7 @@ updated = manager.update_activity(
     "arxiv:2603.05500",
     user_notes="补充阅读笔记",
     ai_report_summary="新摘要",
+    like=-1,
 )
 ```
 
@@ -117,7 +123,8 @@ python scripts/paper_activity_cli.py create arxiv:2603.05500 \
   --recommendation-time 2026-03-08T10:00:00Z \
   --user-notes "note-1" \
   --ai-report-summary "summary-1" \
-  --ai-report-path "data/reports/r1.md"
+  --ai-report-path "data/reports/r1.md" \
+  --like 1
 ```
 
 ### 5.2 查询
@@ -134,7 +141,8 @@ python scripts/paper_activity_cli.py list --limit 20 --offset 0
 ```bash
 python scripts/paper_activity_cli.py update arxiv:2603.05500 \
   --user-notes "note-2" \
-  --ai-report-summary "summary-2"
+  --ai-report-summary "summary-2" \
+  --like -1
 ```
 
 ### 5.5 追加推荐时间
@@ -148,7 +156,19 @@ python scripts/paper_activity_cli.py append-recommendation \
 python scripts/paper_activity_cli.py delete arxiv:2603.05500
 ```
 
-## 6. 设计原则
+## 6. 迁移现有数据库
+新增了 `activity.like` 字段，需要先执行迁移脚本：
+
+```bash
+python scripts/migrate_activity_like.py --db-path data/papers.db
+```
+
+迁移行为：
+1. 若 `activity` 表不存在，则按新结构创建。
+2. 若 `activity.like` 已存在，则跳过。
+3. 若旧表没有 `like`，会重建表并将历史记录 `like` 统一初始化为 `0`。
+
+## 7. 设计原则
 1. 独立性：不调用现有抓取/解析服务，避免业务耦合。
 2. 兼容性：沿用相同配置结构与 sqlite 路径约定，可直接接入现有数据库。
 3. 可测试性：仓储层与业务层分离，单元测试可直接验证 JSON 序列化与 SQL 状态。

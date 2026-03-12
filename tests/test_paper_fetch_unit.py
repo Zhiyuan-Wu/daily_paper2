@@ -29,7 +29,7 @@ class DummySource(PaperSource):
         return target
 
 
-def test_local_query_and_storage(tmp_path: Path) -> None:
+def test_search_online_persists_metadata(tmp_path: Path) -> None:
     fetch = PaperFetch(
         db_path=tmp_path / "papers.db",
         papers_dir=tmp_path / "papers",
@@ -54,10 +54,9 @@ def test_local_query_and_storage(tmp_path: Path) -> None:
     results = fetch.search_online(source="dummy", keywords=["retrieval"], limit=5)
     assert results
     assert results[0].id == "dummy:1"
-
-    local = fetch.query_local(source="dummy", keywords=["testability"], limit=5)
-    assert len(local) == 1
-    assert local[0].title == "A Test Paper"
+    persisted = fetch.repo.get_by_id("dummy:1")
+    assert persisted is not None
+    assert persisted.title == "A Test Paper"
 
 
 def test_lru_cleanup_by_download_count(tmp_path: Path) -> None:

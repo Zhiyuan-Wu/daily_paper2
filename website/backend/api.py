@@ -19,6 +19,10 @@ class NotesUpdateRequest(BaseModel):
     user_notes: str = Field(default="", max_length=50_000)
 
 
+class LikeUpdateRequest(BaseModel):
+    like: int = Field(default=0)
+
+
 class GenerateReportRequest(BaseModel):
     report_date: str | None = None
 
@@ -148,6 +152,16 @@ def create_app(
             updated = app.state.data_store.update_user_notes(paper_id, payload.user_notes)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Paper not found") from exc
+        return updated
+
+    @app.patch("/api/activities/{paper_id}/like")
+    def update_activity_like(paper_id: str, payload: LikeUpdateRequest) -> dict[str, Any]:
+        try:
+            updated = app.state.data_store.update_like(paper_id, payload.like)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Paper not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return updated
 
     @app.post("/api/papers/{paper_id}/ai-interpret")

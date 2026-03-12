@@ -92,14 +92,6 @@ def _build_parser(config_path: str | Path) -> argparse.ArgumentParser:
     )
     download.add_argument("--extra", action="append", help="download extra field key=value")
 
-    search_local = subparsers.add_parser("search-local", help="query local metadata")
-    search_local.add_argument("--source", default=None)
-    search_local.add_argument("--start-date", default=None)
-    search_local.add_argument("--end-date", default=None)
-    search_local.add_argument("--keywords", default=None, help="comma-separated keywords")
-    search_local.add_argument("--has-pdf", choices=["true", "false"], default=None)
-    search_local.add_argument("--limit", type=int, default=cli_cfg["default_local_limit"])
-
     return parser
 
 
@@ -151,21 +143,7 @@ def main(argv: list[str] | None = None) -> None:
         print(json.dumps(metadata_to_dict(paper), ensure_ascii=False, indent=2))
         return
 
-    has_pdf = None
-    if args.has_pdf == "true":
-        has_pdf = True
-    elif args.has_pdf == "false":
-        has_pdf = False
-
-    papers = fetch.query_local(
-        source=args.source,
-        start_date=args.start_date,
-        end_date=args.end_date,
-        keywords=args.keywords,
-        has_pdf=has_pdf,
-        limit=args.limit,
-    )
-    print(json.dumps([metadata_to_dict(p) for p in papers], ensure_ascii=False, indent=2))
+    raise ValueError(f"Unsupported command: {args.command}")
 
 
 if __name__ == "__main__":

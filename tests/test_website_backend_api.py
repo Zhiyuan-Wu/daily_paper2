@@ -93,6 +93,7 @@ def _prepare_test_data(tmp_path: Path) -> tuple[TestClient, str, str]:
             user_notes="initial note",
             ai_report_summary="summary",
             ai_report_path="data/reports/a.md",
+            like=1,
         )
     )
 
@@ -143,7 +144,9 @@ def test_report_and_markdown_endpoints(tmp_path: Path) -> None:
     paper_rows = papers.json()
     assert len(paper_rows) == 2
     assert paper_rows[0]["keywords"] == ["agents", "llm"]
+    assert paper_rows[0]["like"] == 1
     assert paper_rows[1]["keywords"] == ["cs.SD"]
+    assert paper_rows[1]["like"] == 0
 
     markdown = client.get("/api/reports/daily-2026-03-11/markdown")
     assert markdown.status_code == 200
@@ -155,7 +158,7 @@ def test_report_and_markdown_endpoints(tmp_path: Path) -> None:
     assert missing.status_code == 404
 
 
-def test_explore_detail_notes_and_db_update(tmp_path: Path) -> None:
+def test_explore_detail_notes_like_and_db_update(tmp_path: Path) -> None:
     client, _, db_path = _prepare_test_data(tmp_path)
 
     explore = client.get("/api/papers/explore", params={"page": 1, "page_size": 20, "keyword": "agent"})
@@ -167,6 +170,7 @@ def test_explore_detail_notes_and_db_update(tmp_path: Path) -> None:
     detail = client.get("/api/papers/arxiv:2603.00001/detail")
     assert detail.status_code == 200
     assert detail.json()["user_notes"] == "initial note"
+    assert detail.json()["like"] == 1
 
     update = client.patch(
         "/api/activities/arxiv:2603.00001/notes",
@@ -174,12 +178,30 @@ def test_explore_detail_notes_and_db_update(tmp_path: Path) -> None:
     )
     assert update.status_code == 200
     assert update.json()["user_notes"] == "updated from test"
+    assert update.json()["like"] == 1
+
+    like_update = client.patch(
+        "/api/activities/arxiv:2603.00001/like",
+        json={"like": -1},
+    )
+    assert like_update.status_code == 200
+    assert like_update.json()["like"] == -1
+
+    invalid_like = client.patch(
+        "/api/activities/arxiv:2603.00001/like",
+        json={"like": 2},
+    )
+    assert invalid_like.status_code == 422
 
     conn = sqlite3.connect(db_path)
     try:
-        row = conn.execute("SELECT user_notes FROM activity WHERE id = ?", ("arxiv:2603.00001",)).fetchone()
+        row = conn.execute(
+            'SELECT user_notes, "like" FROM activity WHERE id = ?',
+            ("arxiv:2603.00001",),
+        ).fetchone()
         assert row is not None
         assert row[0] == "updated from test"
+        assert row[1] == -1
     finally:
         conn.close()
 

@@ -15,6 +15,7 @@ export interface PaperRow {
   user_notes: string;
   ai_report_summary: string;
   ai_report_path: string;
+  like: -1 | 0 | 1;
 }
 
 export interface ReportRecord {
@@ -44,6 +45,7 @@ export interface ActivityRecord {
   user_notes: string;
   ai_report_summary: string;
   ai_report_path: string;
+  like: -1 | 0 | 1;
 }
 
 export interface TaskRecord {

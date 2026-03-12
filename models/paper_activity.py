@@ -13,6 +13,24 @@ def _normalize_recommendations(values: list[str] | None) -> list[str]:
     return [str(value) for value in values]
 
 
+def _normalize_like(value: Any) -> int:
+    if isinstance(value, bool):
+        raise ValueError("Field 'like' must be -1, 0, or 1")
+    if isinstance(value, int):
+        normalized = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            normalized = int(value.strip())
+        except ValueError as exc:
+            raise ValueError("Field 'like' must be -1, 0, or 1") from exc
+    else:
+        raise ValueError("Field 'like' must be -1, 0, or 1")
+
+    if normalized not in {-1, 0, 1}:
+        raise ValueError("Field 'like' must be -1, 0, or 1")
+    return normalized
+
+
 @dataclass(slots=True)
 class PaperActivityRecord:
     """Activity row persisted in sqlite ``activity`` table."""
@@ -22,6 +40,11 @@ class PaperActivityRecord:
     user_notes: str = ""
     ai_report_summary: str = ""
     ai_report_path: str = ""
+    like: int = 0
+
+    def __post_init__(self) -> None:
+        self.recommendation_records = _normalize_recommendations(self.recommendation_records)
+        self.like = _normalize_like(self.like)
 
     def to_db_row(self) -> dict[str, Any]:
         return {
@@ -32,6 +55,7 @@ class PaperActivityRecord:
             "user_notes": self.user_notes,
             "ai_report_summary": self.ai_report_summary,
             "ai_report_path": self.ai_report_path,
+            "like": _normalize_like(self.like),
         }
 
     @classmethod
@@ -52,4 +76,5 @@ class PaperActivityRecord:
             user_notes=row.get("user_notes") or "",
             ai_report_summary=row.get("ai_report_summary") or "",
             ai_report_path=row.get("ai_report_path") or "",
+            like=_normalize_like(row["like"]),
         )

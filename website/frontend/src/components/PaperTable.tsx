@@ -1,6 +1,8 @@
 import {
   BookOutlined,
+  DislikeOutlined,
   FileSearchOutlined,
+  LikeOutlined,
   RobotOutlined,
   SnippetsOutlined,
 } from '@ant-design/icons';
@@ -20,7 +22,10 @@ interface PaperTableProps {
   onReadOriginal?: (paper: PaperRow) => void;
   onAIInterpret?: (paper: PaperRow) => void;
   onAddNote?: (paper: PaperRow) => void;
+  onToggleLike?: (paper: PaperRow) => void;
+  onToggleDislike?: (paper: PaperRow) => void;
   aiSubmittingIds?: Set<string>;
+  likeSubmittingIds?: Set<string>;
 }
 
 function formatPublishedAt(value: string | null): string {
@@ -45,9 +50,14 @@ export function PaperTable({
   onReadOriginal,
   onAIInterpret,
   onAddNote,
+  onToggleLike,
+  onToggleDislike,
   aiSubmittingIds,
+  likeSubmittingIds,
 }: PaperTableProps) {
-  const showActions = Boolean(onViewDetail || onReadOriginal || onAIInterpret || onAddNote);
+  const showActions = Boolean(
+    onViewDetail || onReadOriginal || onAIInterpret || onAddNote || onToggleLike || onToggleDislike,
+  );
 
   const columns: ColumnsType<PaperRow> = [
     ...(showActions
@@ -55,11 +65,12 @@ export function PaperTable({
           {
             title: '操作',
             key: 'actions',
-            width: 220,
+            width: 300,
             fixed: 'left' as const,
             render: (_value: unknown, record: PaperRow) => {
               const targetUrl = record.pdf_url || record.online_url;
               const aiSubmitting = aiSubmittingIds?.has(record.id) ?? false;
+              const likeSubmitting = likeSubmittingIds?.has(record.id) ?? false;
 
               return (
                 <Space>
@@ -95,6 +106,29 @@ export function PaperTable({
                       type="text"
                       icon={<SnippetsOutlined />}
                       onClick={() => onAddNote?.(record)}
+                    />
+                  </Tooltip>
+
+                  <Tooltip title={record.like === 1 ? '取消喜欢' : '标记喜欢'}>
+                    <Button
+                      aria-label="喜欢"
+                      type={record.like === 1 ? 'primary' : 'text'}
+                      icon={<LikeOutlined />}
+                      loading={likeSubmitting}
+                      disabled={likeSubmitting}
+                      onClick={() => onToggleLike?.(record)}
+                    />
+                  </Tooltip>
+
+                  <Tooltip title={record.like === -1 ? '取消不喜欢' : '标记不喜欢'}>
+                    <Button
+                      aria-label="不喜欢"
+                      type={record.like === -1 ? 'primary' : 'text'}
+                      danger={record.like === -1}
+                      icon={<DislikeOutlined />}
+                      loading={likeSubmitting}
+                      disabled={likeSubmitting}
+                      onClick={() => onToggleDislike?.(record)}
                     />
                   </Tooltip>
                 </Space>

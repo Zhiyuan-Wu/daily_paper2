@@ -141,7 +141,8 @@ class SQLiteDataStore:
                     a.recommendation_records,
                     a.user_notes,
                     a.ai_report_summary,
-                    a.ai_report_path
+                    a.ai_report_path,
+                    a."like" AS activity_like
                 {base_sql}
                 ORDER BY COALESCE(p.published_at, '') DESC, p.id DESC
                 LIMIT ? OFFSET ?
@@ -175,7 +176,8 @@ class SQLiteDataStore:
                     a.recommendation_records,
                     a.user_notes,
                     a.ai_report_summary,
-                    a.ai_report_path
+                    a.ai_report_path,
+                    a."like" AS activity_like
                 FROM papers p
                 LEFT JOIN activity a ON a.id = p.id
                 WHERE p.id = ?
@@ -212,7 +214,8 @@ class SQLiteDataStore:
                     a.recommendation_records,
                     a.user_notes,
                     a.ai_report_summary,
-                    a.ai_report_path
+                    a.ai_report_path,
+                    a."like" AS activity_like
                 FROM papers p
                 LEFT JOIN activity a ON a.id = p.id
                 WHERE p.id IN ({placeholders})
@@ -239,8 +242,8 @@ class SQLiteDataStore:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO activity (
-                    id, recommendation_records, user_notes, ai_report_summary, ai_report_path
-                ) VALUES (?, '[]', '', '', '')
+                    id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like"
+                ) VALUES (?, '[]', '', '', '', 0)
                 """,
                 (paper_id,),
             )
@@ -250,7 +253,7 @@ class SQLiteDataStore:
             )
             row = conn.execute(
                 """
-                SELECT id, recommendation_records, user_notes, ai_report_summary, ai_report_path
+                SELECT id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like" AS activity_like
                 FROM activity
                 WHERE id = ?
                 """,
@@ -266,6 +269,47 @@ class SQLiteDataStore:
             "user_notes": row["user_notes"] or "",
             "ai_report_summary": row["ai_report_summary"] or "",
             "ai_report_path": row["ai_report_path"] or "",
+            "like": _normalize_like(row["activity_like"]),
+        }
+
+    def update_like(self, paper_id: str, like: int) -> dict[str, Any]:
+        if like not in {-1, 0, 1}:
+            raise ValueError("like must be -1, 0, or 1")
+        if not self.paper_exists(paper_id):
+            raise KeyError(paper_id)
+
+        with self.conn() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO activity (
+                    id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like"
+                ) VALUES (?, '[]', '', '', '', 0)
+                """,
+                (paper_id,),
+            )
+            conn.execute(
+                'UPDATE activity SET "like" = ? WHERE id = ?',
+                (like, paper_id),
+            )
+            row = conn.execute(
+                """
+                SELECT id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like" AS activity_like
+                FROM activity
+                WHERE id = ?
+                """,
+                (paper_id,),
+            ).fetchone()
+
+        if not row:
+            raise RuntimeError(f"Failed to update like for {paper_id}")
+
+        return {
+            "id": row["id"],
+            "recommendation_records": _json_list(row["recommendation_records"]),
+            "user_notes": row["user_notes"] or "",
+            "ai_report_summary": row["ai_report_summary"] or "",
+            "ai_report_path": row["ai_report_path"] or "",
+            "like": _normalize_like(row["activity_like"]),
         }
 
 
@@ -293,6 +337,7 @@ def _paper_row_to_payload(row: sqlite3.Row) -> dict[str, Any]:
         "user_notes": row["user_notes"] or "",
         "ai_report_summary": row["ai_report_summary"] or "",
         "ai_report_path": row["ai_report_path"] or "",
+        "like": _normalize_like(row["activity_like"]),
     }
 
 
@@ -359,3 +404,20 @@ def _json_object(raw: Any) -> dict[str, Any]:
         if isinstance(parsed, dict):
             return parsed
     return {}
+
+
+def _normalize_like(raw: Any) -> int:
+    if raw is None:
+        return 0
+    if isinstance(raw, bool):
+        return int(raw)
+    if isinstance(raw, int) and raw in {-1, 0, 1}:
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = int(raw.strip())
+        except ValueError:
+            return 0
+        if parsed in {-1, 0, 1}:
+            return parsed
+    return 0

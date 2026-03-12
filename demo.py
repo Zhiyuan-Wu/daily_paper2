@@ -5,11 +5,10 @@
 1. arXiv 在线查询（支持扩展参数 category）
 2. 下载一篇论文到本地
 3. 解析已下载论文为 markdown 文本（PaperParser）
-4. 查询本地元信息
-5. 创建一条日报记录（DailyReportManager）
-6. 查询某日的日报记录
-7. Hugging Face 指定日期查询（使用配置中的代理）
-8. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
+4. 创建一条日报记录（DailyReportManager）
+5. 查询某日的日报记录
+6. Hugging Face 指定日期查询（使用配置中的代理）
+7. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
 """
 
 from __future__ import annotations
@@ -77,14 +76,10 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             print("  parse_failed={}".format(exc))
 
-    # 3) 本地查询：只看已下载的 arXiv 论文。
-    local_results = fetch.query_local(source="arxiv", has_pdf=True, limit=5)
-    print_papers("Local Metadata (arXiv + has_pdf=true)", local_results, limit=5)
-
-    # 4) 生成一条日报记录，关联当前本地查询到的论文。
+    # 3) 生成一条日报记录，关联当前在线查询到的论文。
     report_date = datetime.now().date().isoformat()
     report_id = f"daily-{report_date}"
-    related_ids = [paper.id for paper in local_results[:3]]
+    related_ids = [paper.id for paper in arxiv_results[:3]]
     if downloaded and downloaded.id not in related_ids:
         related_ids.insert(0, downloaded.id)
 
@@ -107,7 +102,7 @@ def main() -> None:
     for idx, item in enumerate(report_rows, start=1):
         print(f"  [{idx}] id={item.id} papers={len(item.related_paper_ids)} path={item.local_md_path}")
 
-    # 5) Hugging Face 指定日期查询（依赖代理可用性）。
+    # 4) Hugging Face 指定日期查询（依赖代理可用性）。
     try:
         hf_results = fetch.search_online(
             source="huggingface",
@@ -118,7 +113,7 @@ def main() -> None:
         )
         print_papers("HuggingFace Daily Papers", hf_results)
 
-        # 6) 下载第一篇 HuggingFace 论文（若已缓存，则不会重复下载）。
+        # 5) 下载第一篇 HuggingFace 论文（若已缓存，则不会重复下载）。
         if hf_results:
             hf_downloaded = fetch.download_paper(hf_results[0].id)
             print("\nHuggingFace Downloaded:")

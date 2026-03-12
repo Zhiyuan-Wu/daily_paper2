@@ -38,11 +38,14 @@ def test_e2e_cli_crud_and_db_state(tmp_path: Path) -> None:
         "summary-1",
         "--ai-report-path",
         "data/reports/r1.md",
+        "--like",
+        "1",
     )
     assert create.returncode == 0, create.stderr
     create_payload = json.loads(create.stdout)
     assert create_payload["id"] == paper_id
     assert create_payload["recommendation_records"] == ["2026-03-08T10:00:00Z"]
+    assert create_payload["like"] == 1
 
     append = _run_cli(tmp_path, "append-recommendation", paper_id, "2026-03-08T11:00:00Z")
     assert append.returncode == 0, append.stderr
@@ -60,11 +63,14 @@ def test_e2e_cli_crud_and_db_state(tmp_path: Path) -> None:
         "note-2",
         "--ai-report-summary",
         "summary-2",
+        "--like",
+        "-1",
     )
     assert update.returncode == 0, update.stderr
     update_payload = json.loads(update.stdout)
     assert update_payload["user_notes"] == "note-2"
     assert update_payload["ai_report_summary"] == "summary-2"
+    assert update_payload["like"] == -1
 
     get_one = _run_cli(tmp_path, "get", paper_id)
     assert get_one.returncode == 0, get_one.stderr
@@ -81,7 +87,7 @@ def test_e2e_cli_crud_and_db_state(tmp_path: Path) -> None:
     conn = sqlite3.connect(tmp_path / "papers.db")
     try:
         row = conn.execute(
-            "SELECT recommendation_records, user_notes, ai_report_summary, ai_report_path FROM activity WHERE id = ?",
+            'SELECT recommendation_records, user_notes, ai_report_summary, ai_report_path, "like" FROM activity WHERE id = ?',
             (paper_id,),
         ).fetchone()
         assert row is not None
@@ -89,6 +95,7 @@ def test_e2e_cli_crud_and_db_state(tmp_path: Path) -> None:
         assert row[1] == "note-2"
         assert row[2] == "summary-2"
         assert row[3] == "data/reports/r1.md"
+        assert row[4] == -1
     finally:
         conn.close()
 

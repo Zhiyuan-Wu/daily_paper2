@@ -38,7 +38,8 @@ class PaperActivityRepository:
                     recommendation_records TEXT NOT NULL DEFAULT '[]',
                     user_notes TEXT NOT NULL DEFAULT '',
                     ai_report_summary TEXT NOT NULL DEFAULT '',
-                    ai_report_path TEXT NOT NULL DEFAULT ''
+                    ai_report_path TEXT NOT NULL DEFAULT '',
+                    "like" INTEGER NOT NULL DEFAULT 0 CHECK("like" IN (-1, 0, 1))
                 )
                 """
             )
@@ -53,13 +54,14 @@ class PaperActivityRepository:
                 conn.execute(
                     f"""
                     INSERT INTO {self.table_name} (
-                        id, recommendation_records, user_notes, ai_report_summary, ai_report_path
-                    ) VALUES (?, ?, ?, ?, ?)
+                        id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like"
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         recommendation_records=excluded.recommendation_records,
                         user_notes=excluded.user_notes,
                         ai_report_summary=excluded.ai_report_summary,
-                        ai_report_path=excluded.ai_report_path
+                        ai_report_path=excluded.ai_report_path,
+                        "like"=excluded."like"
                     """,
                     (
                         row["id"],
@@ -67,6 +69,7 @@ class PaperActivityRepository:
                         row["user_notes"],
                         row["ai_report_summary"],
                         row["ai_report_path"],
+                        row["like"],
                     ),
                 )
                 created = self.get(record.id)
@@ -77,8 +80,8 @@ class PaperActivityRepository:
             conn.execute(
                 f"""
                 INSERT INTO {self.table_name} (
-                    id, recommendation_records, user_notes, ai_report_summary, ai_report_path
-                ) VALUES (?, ?, ?, ?, ?)
+                    id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like"
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["id"],
@@ -86,6 +89,7 @@ class PaperActivityRepository:
                     row["user_notes"],
                     row["ai_report_summary"],
                     row["ai_report_path"],
+                    row["like"],
                 ),
             )
         return record
@@ -116,6 +120,7 @@ class PaperActivityRepository:
         user_notes: str | None = None,
         ai_report_summary: str | None = None,
         ai_report_path: str | None = None,
+        like: int | None = None,
     ) -> PaperActivityRecord:
         current = self.get(paper_id)
         if current is None:
@@ -129,13 +134,15 @@ class PaperActivityRepository:
             current.ai_report_summary = ai_report_summary
         if ai_report_path is not None:
             current.ai_report_path = ai_report_path
+        if like is not None:
+            current.like = like
 
         row = current.to_db_row()
         with self._conn() as conn:
             conn.execute(
                 f"""
                 UPDATE {self.table_name}
-                SET recommendation_records = ?, user_notes = ?, ai_report_summary = ?, ai_report_path = ?
+                SET recommendation_records = ?, user_notes = ?, ai_report_summary = ?, ai_report_path = ?, "like" = ?
                 WHERE id = ?
                 """,
                 (
@@ -143,6 +150,7 @@ class PaperActivityRepository:
                     row["user_notes"],
                     row["ai_report_summary"],
                     row["ai_report_path"],
+                    row["like"],
                     paper_id,
                 ),
             )

@@ -23,6 +23,7 @@ import {
   getReportByDate,
   getReportMarkdown,
   getReportPapers,
+  updatePaperLike,
   updatePaperNotes,
 } from '../api/client';
 import type { PaperRow } from '../api/types';
@@ -30,6 +31,16 @@ import { MarkdownViewer } from '../components/MarkdownViewer';
 import { PaperTable } from '../components/PaperTable';
 
 const TODAY = dayjs();
+
+function likeLabel(value: -1 | 0 | 1): string {
+  if (value === 1) {
+    return '喜欢';
+  }
+  if (value === -1) {
+    return '不喜欢';
+  }
+  return '无信息';
+}
 
 export function DailyReportPage() {
   const queryClient = useQueryClient();
@@ -42,6 +53,7 @@ export function DailyReportPage() {
   const [notePaper, setNotePaper] = useState<PaperRow | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [aiSubmittingIds, setAiSubmittingIds] = useState<Set<string>>(new Set());
+  const [likeSubmittingIds, setLikeSubmittingIds] = useState<Set<string>>(new Set());
 
   const reportQuery = useQuery({
     queryKey: ['report-by-date', queryDate],
@@ -109,6 +121,33 @@ export function DailyReportPage() {
     },
   });
 
+  const likeMutation = useMutation({
+    mutationFn: ({ paperId, like }: { paperId: string; like: -1 | 0 | 1 }) =>
+      updatePaperLike(paperId, like),
+    onSuccess: (_payload, variables) => {
+      setLikeSubmittingIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.paperId);
+        return next;
+      });
+      if (report?.id) {
+        void queryClient.invalidateQueries({ queryKey: ['report-papers', report.id] });
+      }
+      if (detailPaperId) {
+        void queryClient.invalidateQueries({ queryKey: ['daily-detail', detailPaperId] });
+      }
+      messageApi.success(`偏好已更新为: ${likeLabel(variables.like)}`);
+    },
+    onError: (error: Error, variables) => {
+      setLikeSubmittingIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.paperId);
+        return next;
+      });
+      messageApi.error(`偏好更新失败: ${error.message}`);
+    },
+  });
+
   const generateMutation = useMutation({
     mutationFn: (reportDate: string) => generateReport(reportDate),
     onSuccess: (payload) => {
@@ -169,6 +208,9 @@ export function DailyReportPage() {
           </p>
           <p>
             <strong>用户笔记:</strong> {detailPaper.user_notes || '-'}
+          </p>
+          <p>
+            <strong>偏好:</strong> {likeLabel(detailPaper.like)}
           </p>
           <p>
             <strong>AI摘要:</strong> {detailPaper.ai_report_summary || '-'}
@@ -267,7 +309,26 @@ export function DailyReportPage() {
               setNotePaper(paper);
               setNoteDraft(paper.user_notes ?? '');
             }}
+            onToggleLike={(paper) => {
+              const nextLike: -1 | 0 | 1 = paper.like === 1 ? 0 : 1;
+              setLikeSubmittingIds((current) => {
+                const next = new Set(current);
+                next.add(paper.id);
+                return next;
+              });
+              likeMutation.mutate({ paperId: paper.id, like: nextLike });
+            }}
+            onToggleDislike={(paper) => {
+              const nextLike: -1 | 0 | 1 = paper.like === -1 ? 0 : -1;
+              setLikeSubmittingIds((current) => {
+                const next = new Set(current);
+                next.add(paper.id);
+                return next;
+              });
+              likeMutation.mutate({ paperId: paper.id, like: nextLike });
+            }}
             aiSubmittingIds={aiSubmittingIds}
+            likeSubmittingIds={likeSubmittingIds}
           />
         </Card>
       ) : null}

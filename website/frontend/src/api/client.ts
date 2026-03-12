@@ -89,6 +89,13 @@ export function updatePaperNotes(paperId: string, userNotes: string): Promise<Ac
   });
 }
 
+export function updatePaperLike(paperId: string, like: -1 | 0 | 1): Promise<ActivityRecord> {
+  return request<ActivityRecord>(`/api/activities/${encodeURIComponent(paperId)}/like`, {
+    method: 'PATCH',
+    body: JSON.stringify({ like }),
+  });
+}
+
 export function createAiInterpretTask(paperId: string): Promise<CreateTaskResponse> {
   return request<CreateTaskResponse>(`/api/papers/${encodeURIComponent(paperId)}/ai-interpret`, {
     method: 'POST',

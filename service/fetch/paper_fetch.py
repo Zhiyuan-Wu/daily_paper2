@@ -1,8 +1,8 @@
-"""Unified facade for online paper discovery, download and local metadata query."""
+"""Unified facade for online paper discovery and paper download."""
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,6 @@ class PaperFetch:
     This class provides three high-level capabilities:
     1. ``search_online``: query metadata from a selected remote source.
     2. ``download_paper``: download one paper PDF and update local metadata.
-    3. ``query_local``: query historical metadata stored in sqlite.
     """
 
     def __init__(
@@ -66,7 +65,6 @@ class PaperFetch:
         self.repo = PaperRepository(self.db_path)
         self.max_downloaded_papers = resolved_max_downloaded
         self.default_online_limit = _as_int(cli_cfg.get("default_online_limit"), "paper_fetch.cli.default_online_limit")
-        self.default_local_limit = _as_int(cli_cfg.get("default_local_limit"), "paper_fetch.cli.default_local_limit")
         self.sources: dict[str, PaperSource] = {}
 
         # Register built-in sources with config-driven defaults.
@@ -232,35 +230,6 @@ class PaperFetch:
         """Build the deterministic local file path used by built-in sources."""
         return target_dir / f"{paper_id.replace(':', '_')}.pdf"
 
-    def query_local(
-        self,
-        source: str | None = None,
-        keywords: list[str] | str | None = None,
-        start_date: date | datetime | str | None = None,
-        end_date: date | datetime | str | None = None,
-        has_pdf: bool | None = None,
-        limit: int | None = None,
-    ) -> list[PaperMetadata]:
-        """Query local sqlite metadata with optional filters."""
-        start_dt = _as_start_datetime(start_date)
-        end_dt = _as_end_datetime(end_date)
-        keyword_list = _as_keywords(keywords)
-        resolved_limit = limit if limit is not None else self.default_local_limit
-
-        papers = self.repo.search_local(
-            source=source,
-            keywords=keyword_list,
-            start_date=start_dt,
-            end_date=end_dt,
-            has_pdf=has_pdf,
-            limit=resolved_limit,
-        )
-
-        # Touching access time ensures LRU reflects actual user reads.
-        for paper in papers:
-            self.repo.touch_access(paper.id)
-        return papers
-
     def _apply_lru(self) -> None:
         """Evict oldest downloaded PDFs when local cache exceeds the capacity."""
         if self.max_downloaded_papers <= 0:
@@ -311,22 +280,6 @@ def _as_date(value: date | datetime | str | None) -> date | None:
     if isinstance(value, date):
         return value
     return datetime.fromisoformat(value).date()
-
-
-def _as_start_datetime(value: date | datetime | str | None) -> datetime | None:
-    """Convert a date-like value to UTC day-start datetime."""
-    d = _as_date(value)
-    if d is None:
-        return None
-    return datetime.combine(d, time.min, tzinfo=timezone.utc)
-
-
-def _as_end_datetime(value: date | datetime | str | None) -> datetime | None:
-    """Convert a date-like value to UTC day-end datetime."""
-    d = _as_date(value)
-    if d is None:
-        return None
-    return datetime.combine(d, time.max, tzinfo=timezone.utc)
 
 
 def _as_mapping(value: Any, key_name: str) -> dict[str, Any]:

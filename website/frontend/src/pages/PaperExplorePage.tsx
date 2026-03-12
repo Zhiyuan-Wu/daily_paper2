@@ -21,6 +21,7 @@ import {
   createAiInterpretTask,
   getExplorePapers,
   getPaperDetail,
+  updatePaperLike,
   updatePaperNotes,
 } from '../api/client';
 import type { PaperRow } from '../api/types';
@@ -31,6 +32,16 @@ const SOURCE_OPTIONS = [
   { value: 'arxiv', label: 'arXiv' },
   { value: 'huggingface', label: 'HuggingFace' },
 ];
+
+function likeLabel(value: -1 | 0 | 1): string {
+  if (value === 1) {
+    return '喜欢';
+  }
+  if (value === -1) {
+    return '不喜欢';
+  }
+  return '无信息';
+}
 
 export function PaperExplorePage() {
   const queryClient = useQueryClient();
@@ -46,6 +57,7 @@ export function PaperExplorePage() {
   const [notePaper, setNotePaper] = useState<PaperRow | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [aiSubmittingIds, setAiSubmittingIds] = useState<Set<string>>(new Set());
+  const [likeSubmittingIds, setLikeSubmittingIds] = useState<Set<string>>(new Set());
 
   const exploreQuery = useQuery({
     queryKey: ['papers-explore', page, pageSize, keyword, source],
@@ -96,6 +108,31 @@ export function PaperExplorePage() {
     },
   });
 
+  const likeMutation = useMutation({
+    mutationFn: ({ paperId, like }: { paperId: string; like: -1 | 0 | 1 }) =>
+      updatePaperLike(paperId, like),
+    onSuccess: (_payload, variables) => {
+      setLikeSubmittingIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.paperId);
+        return next;
+      });
+      void queryClient.invalidateQueries({ queryKey: ['papers-explore'] });
+      if (detailPaperId) {
+        void queryClient.invalidateQueries({ queryKey: ['paper-detail', detailPaperId] });
+      }
+      messageApi.success(`偏好已更新为: ${likeLabel(variables.like)}`);
+    },
+    onError: (error: Error, variables) => {
+      setLikeSubmittingIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.paperId);
+        return next;
+      });
+      messageApi.error(`偏好更新失败: ${error.message}`);
+    },
+  });
+
   const papers = exploreQuery.data?.items ?? [];
 
   const handleSearch = () => {
@@ -128,6 +165,26 @@ export function PaperExplorePage() {
   const openNoteModal = (paper: PaperRow) => {
     setNotePaper(paper);
     setNoteDraft(paper.user_notes ?? '');
+  };
+
+  const toggleLike = (paper: PaperRow) => {
+    const nextLike: -1 | 0 | 1 = paper.like === 1 ? 0 : 1;
+    setLikeSubmittingIds((current) => {
+      const next = new Set(current);
+      next.add(paper.id);
+      return next;
+    });
+    likeMutation.mutate({ paperId: paper.id, like: nextLike });
+  };
+
+  const toggleDislike = (paper: PaperRow) => {
+    const nextLike: -1 | 0 | 1 = paper.like === -1 ? 0 : -1;
+    setLikeSubmittingIds((current) => {
+      const next = new Set(current);
+      next.add(paper.id);
+      return next;
+    });
+    likeMutation.mutate({ paperId: paper.id, like: nextLike });
   };
 
   const detailPaper = detailQuery.data;
@@ -175,6 +232,9 @@ export function PaperExplorePage() {
           </p>
           <p>
             <strong>用户笔记:</strong> {detailPaper.user_notes || '-'}
+          </p>
+          <p>
+            <strong>偏好:</strong> {likeLabel(detailPaper.like)}
           </p>
           <p>
             <strong>AI摘要:</strong> {detailPaper.ai_report_summary || '-'}
@@ -255,7 +315,10 @@ export function PaperExplorePage() {
             onReadOriginal={openOriginal}
             onAIInterpret={submitAIInterpret}
             onAddNote={openNoteModal}
+            onToggleLike={toggleLike}
+            onToggleDislike={toggleDislike}
             aiSubmittingIds={aiSubmittingIds}
+            likeSubmittingIds={likeSubmittingIds}
           />
         )}
       </Card>

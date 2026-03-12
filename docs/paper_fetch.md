@@ -6,7 +6,6 @@
 对外能力：
 1. 在线查询：支持多论文源 + 日期范围 + 关键词 + 插件扩展参数。
 2. 论文下载：按 id 下载 PDF 到本地，自动更新 sqlite 中 `local_pdf_path`。
-3. 本地查询：从 sqlite 检索历史元信息，支持过滤条件。
 
 ## 2. 配置驱动（config.yaml）
 项目根目录 `config.yaml` 是默认值来源，重要参数不在业务代码中硬编码。
@@ -31,7 +30,6 @@ paper_fetch:
       download_chunk_size: 65536
   cli:
     default_online_limit: 20
-    default_local_limit: 100
 ```
 
 说明：
@@ -89,9 +87,6 @@ papers = fetch.search_online(
 
 saved = fetch.download_paper(papers[0].id)
 print(saved.local_pdf_path)
-
-local = fetch.query_local(source="arxiv", has_pdf=True)
-print(len(local))
 ```
 
 ## 7. CLI 用法
@@ -117,18 +112,12 @@ python scripts/paper_fetch_cli.py download arxiv:2603.01234
 python scripts/paper_fetch_cli.py download arxiv:2603.01234 --force-refresh
 ```
 
-3. 本地查询
-```bash
-python scripts/paper_fetch_cli.py search-local --has-pdf true
-```
-
 ## 8. 演示脚本
 根目录 `demo.py` 展示：
 1. arXiv 在线查询
 2. 下载第一篇论文
-3. 本地元信息查询
-4. Hugging Face 指定日期查询（支持代理）
-5. 下载第一篇 Hugging Face 论文
+3. Hugging Face 指定日期查询（支持代理）
+4. 下载第一篇 Hugging Face 论文
 
 运行：
 ```bash

@@ -35,6 +35,7 @@ class PaperActivityManager:
         user_notes: str = "",
         ai_report_summary: str = "",
         ai_report_path: str = "",
+        like: int = 0,
         *,
         overwrite: bool = False,
     ) -> PaperActivityRecord:
@@ -44,6 +45,7 @@ class PaperActivityManager:
             user_notes=user_notes,
             ai_report_summary=ai_report_summary,
             ai_report_path=ai_report_path,
+            like=like,
         )
         return self.repo.create(record, overwrite=overwrite)
 
@@ -61,6 +63,7 @@ class PaperActivityManager:
         user_notes: str | None = None,
         ai_report_summary: str | None = None,
         ai_report_path: str | None = None,
+        like: int | None = None,
     ) -> PaperActivityRecord:
         return self.repo.update_fields(
             paper_id,
@@ -68,6 +71,7 @@ class PaperActivityManager:
             user_notes=user_notes,
             ai_report_summary=ai_report_summary,
             ai_report_path=ai_report_path,
+            like=like,
         )
 
     def append_recommendation(self, paper_id: str, recommendation_time: str) -> PaperActivityRecord:

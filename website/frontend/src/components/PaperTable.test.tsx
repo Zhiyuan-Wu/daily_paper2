@@ -22,6 +22,7 @@ const SAMPLE_PAPER: PaperRow = {
   user_notes: '',
   ai_report_summary: '',
   ai_report_path: '',
+  like: 0,
 };
 
 describe('PaperTable', () => {
@@ -31,6 +32,8 @@ describe('PaperTable', () => {
     const onReadOriginal = vi.fn();
     const onAIInterpret = vi.fn();
     const onAddNote = vi.fn();
+    const onToggleLike = vi.fn();
+    const onToggleDislike = vi.fn();
 
     render(
       <PaperTable
@@ -40,20 +43,26 @@ describe('PaperTable', () => {
         onReadOriginal={onReadOriginal}
         onAIInterpret={onAIInterpret}
         onAddNote={onAddNote}
-      />, 
+        onToggleLike={onToggleLike}
+        onToggleDislike={onToggleDislike}
+      />,
     );
 
     const buttons = screen.getAllByRole('button');
-    expect(buttons.length).toBeGreaterThanOrEqual(4);
+    expect(buttons.length).toBeGreaterThanOrEqual(6);
 
     await user.click(buttons[0]);
     await user.click(buttons[1]);
     await user.click(buttons[2]);
     await user.click(buttons[3]);
+    await user.click(screen.getByRole('button', { name: '喜欢' }));
+    await user.click(screen.getByRole('button', { name: '不喜欢' }));
 
     expect(onViewDetail).toHaveBeenCalledWith(SAMPLE_PAPER);
     expect(onReadOriginal).toHaveBeenCalledWith(SAMPLE_PAPER);
     expect(onAIInterpret).toHaveBeenCalledWith(SAMPLE_PAPER);
     expect(onAddNote).toHaveBeenCalledWith(SAMPLE_PAPER);
+    expect(onToggleLike).toHaveBeenCalledWith(SAMPLE_PAPER);
+    expect(onToggleDislike).toHaveBeenCalledWith(SAMPLE_PAPER);
   });
 });

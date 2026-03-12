@@ -17,7 +17,6 @@ paper_fetch:
       download_chunk_size: 65536
   cli:
     default_online_limit: 20
-    default_local_limit: 100
 
 paper_parse:
   db_path: data/papers.db

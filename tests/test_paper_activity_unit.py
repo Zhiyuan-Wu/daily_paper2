@@ -17,6 +17,7 @@ def test_model_roundtrip() -> None:
         user_notes="read section 3",
         ai_report_summary="method summary",
         ai_report_path="data/reports/2603.05500.md",
+        like=1,
     )
     row = record.to_db_row()
     restored = PaperActivityRecord.from_db_row(row)
@@ -25,6 +26,7 @@ def test_model_roundtrip() -> None:
     assert restored.user_notes == record.user_notes
     assert restored.ai_report_summary == record.ai_report_summary
     assert restored.ai_report_path == record.ai_report_path
+    assert restored.like == record.like
 
 
 def test_crud_and_raw_json_state(tmp_path: Path) -> None:
@@ -37,6 +39,7 @@ def test_crud_and_raw_json_state(tmp_path: Path) -> None:
         user_notes="first note",
         ai_report_summary="summary v1",
         ai_report_path="data/reports/v1.md",
+        like=1,
     )
     assert created.id == paper_id
 
@@ -44,6 +47,7 @@ def test_crud_and_raw_json_state(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.recommendation_records == ["2026-03-08T10:00:00Z"]
     assert loaded.user_notes == "first note"
+    assert loaded.like == 1
 
     updated = manager.update_activity(
         paper_id,
@@ -51,14 +55,16 @@ def test_crud_and_raw_json_state(tmp_path: Path) -> None:
         user_notes="second note",
         ai_report_summary="summary v2",
         ai_report_path="data/reports/v2.md",
+        like=-1,
     )
     assert updated.user_notes == "second note"
     assert len(updated.recommendation_records) == 2
+    assert updated.like == -1
 
     conn = sqlite3.connect(tmp_path / "papers.db")
     try:
         row = conn.execute(
-            "SELECT recommendation_records, user_notes, ai_report_summary, ai_report_path FROM activity WHERE id = ?",
+            'SELECT recommendation_records, user_notes, ai_report_summary, ai_report_path, "like" FROM activity WHERE id = ?',
             (paper_id,),
         ).fetchone()
         assert row is not None
@@ -66,6 +72,7 @@ def test_crud_and_raw_json_state(tmp_path: Path) -> None:
         assert row[1] == "second note"
         assert row[2] == "summary v2"
         assert row[3] == "data/reports/v2.md"
+        assert row[4] == -1
     finally:
         conn.close()
 
@@ -80,6 +87,7 @@ def test_append_recommendation_auto_create(tmp_path: Path) -> None:
 
     one = manager.append_recommendation(paper_id, "2026-03-08T08:00:00Z")
     assert one.recommendation_records == ["2026-03-08T08:00:00Z"]
+    assert one.like == 0
 
     two = manager.append_recommendation(paper_id, "2026-03-08T09:00:00Z")
     assert two.recommendation_records == ["2026-03-08T08:00:00Z", "2026-03-08T09:00:00Z"]
@@ -89,3 +97,9 @@ def test_update_missing_record_raises(tmp_path: Path) -> None:
     manager = PaperActivityManager(db_path=tmp_path / "papers.db")
     with pytest.raises(KeyError):
         manager.update_activity("missing:1", user_notes="x")
+
+
+def test_invalid_like_value_raises(tmp_path: Path) -> None:
+    manager = PaperActivityManager(db_path=tmp_path / "papers.db")
+    with pytest.raises(ValueError):
+        manager.create_activity("bad:1", like=2)
