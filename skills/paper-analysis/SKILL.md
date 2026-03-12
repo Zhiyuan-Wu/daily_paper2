@@ -34,6 +34,14 @@ ANALYSIS_MD="$TMP_DIR/analysis.md"
 mkdir -p data/analysis
 ```
 
+## Step 0: Check if result already exist
+
+```bash
+python scripts/paper_activity_cli.py get "$PAPER_ID"
+```
+
+In case that `ai-report-summary` and `ai-report-path` are not empty (and target file exist too), return user with existing data. Otherwise, do following steps.
+
 ## Step 1: Check PDF Download Status and Complete if Missing
 
 Check current paths:
@@ -124,7 +132,7 @@ Action:
 
 Action: 
 1. Read `$PARSED_PATH`, `$QUESTIONS_MD` and `$ANALYSIS_MD`.
-2. summarize all findings into final report markdown at: `$REPORT_MD`.
+2. summarize all findings into a **Chinese** final report markdown at: `$REPORT_MD`.
 
 Required sections:
 1. Background and target problem.
