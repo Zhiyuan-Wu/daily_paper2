@@ -52,3 +52,26 @@ paper_report:
   reports_dir: data/reports
   cli:
     default_limit: 100
+
+paper_recommand:
+  db_path: data/papers.db
+  paper_table: papers
+  activity_table: activity
+  default_algorithm: fusion
+  default_top_k: 20
+  plugins:
+    semantic:
+      enabled: true
+      top_k: 20
+      weight: 1.0
+    interaction:
+      enabled: true
+      like_weight: 0.45
+      note_weight: 0.55
+      dislike_penalty: 0.4
+      recommended_penalty: 0.08
+      weight: 1.0
+    time:
+      enabled: true
+      freshness_window_days: 30
+      weight: 1.0

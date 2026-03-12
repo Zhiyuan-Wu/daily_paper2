@@ -5,11 +5,13 @@
 1. arXiv 在线查询（支持扩展参数 category）
 2. 下载一篇论文到本地
 3. 解析已下载论文为 markdown 文本（PaperParser）
-4. 创建一条日报记录（DailyReportManager）
-5. 查询某日的日报记录
-6. Hugging Face 指定日期查询（使用配置中的代理）
-7. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
-8. 增量构建论文向量库并执行语义检索（PaperEmbeddingService）
+4. 写入用户交互记录（PaperActivityManager）
+5. 创建一条日报记录（DailyReportManager）
+6. 查询某日的日报记录
+7. Hugging Face 指定日期查询（使用配置中的代理）
+8. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
+9. 增量构建论文向量库并执行语义检索（PaperEmbeddingService）
+10. 执行推荐（PaperRecommandService：time / interaction / fusion / semantic）
 """
 
 from __future__ import annotations
@@ -21,7 +23,9 @@ from typing import Iterable
 from models.paper import PaperMetadata
 from service.fetch import PaperFetch
 from service.embedding import PaperEmbeddingService
+from service.activity_management import PaperActivityManager
 from service.parse import PaperParser
+from service.recommand import PaperRecommandService
 from service.report_management import DailyReportManager
 
 
@@ -46,11 +50,21 @@ def print_papers(title: str, papers: Iterable[PaperMetadata], limit: int = 3) ->
         print(f"    published_at={payload['published_at']} | pdf={payload['local_pdf_path']}")
 
 
+def print_recommand_rows(title: str, rows: list, limit: int = 5) -> None:
+    print(f"\n=== {title} ===")
+    for idx, row in enumerate(rows[:limit], start=1):
+        print(f"[{idx}] id={row.paper.id} score={row.score:.4f}")
+        print(f"    title={row.paper.title}")
+        print(f"    algorithm_scores={row.algorithm_scores}")
+
+
 def main() -> None:
     """运行端到端演示流程。"""
     fetch = PaperFetch()  # 默认读取根目录 config.yaml
     parser = PaperParser()  # 默认读取根目录 config.yaml
+    activity_manager = PaperActivityManager()  # 默认读取根目录 config.yaml
     report_manager = DailyReportManager()  # 默认读取根目录 config.yaml
+    recommand_service = PaperRecommandService()  # 默认读取根目录 config.yaml
 
     # 1) 在线查询 arXiv（带扩展字段 category）。
     arxiv_results = fetch.search_online(
@@ -78,7 +92,22 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             print("  parse_failed={}".format(exc))
 
-    # 3) 生成一条日报记录，关联当前在线查询到的论文。
+    # 3) 为下载论文写入用户活动，供 interaction 推荐算法使用。
+    if downloaded:
+        activity = activity_manager.create_activity(
+            downloaded.id,
+            recommendation_records=[datetime.now().isoformat()],
+            user_notes="demo note: promising work",
+            like=1,
+            overwrite=True,
+        )
+        print("\nActivity Updated:")
+        print(f"  id={activity.id}")
+        print(f"  like={activity.like}")
+        print(f"  recommendation_records={activity.recommendation_records}")
+        print(f"  user_notes={activity.user_notes}")
+
+    # 4) 生成一条日报记录，关联当前在线查询到的论文。
     report_date = datetime.now().date().isoformat()
     report_id = f"daily-{report_date}"
     related_ids = [paper.id for paper in arxiv_results[:3]]
@@ -104,7 +133,7 @@ def main() -> None:
     for idx, item in enumerate(report_rows, start=1):
         print(f"  [{idx}] id={item.id} papers={len(item.related_paper_ids)} path={item.local_md_path}")
 
-    # 4) Hugging Face 指定日期查询（依赖代理可用性）。
+    # 5) Hugging Face 指定日期查询（依赖代理可用性）。
     try:
         hf_results = fetch.search_online(
             source="huggingface",
@@ -115,7 +144,7 @@ def main() -> None:
         )
         print_papers("HuggingFace Daily Papers", hf_results)
 
-        # 5) 下载第一篇 HuggingFace 论文（若已缓存，则不会重复下载）。
+        # 6) 下载第一篇 HuggingFace 论文（若已缓存，则不会重复下载）。
         if hf_results:
             hf_downloaded = fetch.download_paper(hf_results[0].id)
             print("\nHuggingFace Downloaded:")
@@ -125,7 +154,7 @@ def main() -> None:
         print("\nHuggingFace 查询未成功（通常是代理不可用）：")
         print(f"  {exc}")
 
-    # 6) 论文向量化增量同步 + 语义检索（依赖 Ollama embed 可用）。
+    # 7) 论文向量化增量同步 + 语义检索（依赖 Ollama embed 可用）。
     try:
         embedding_service = PaperEmbeddingService()  # 默认读取根目录 config.yaml
         version = embedding_service.sync_incremental(limit=50)
@@ -148,6 +177,27 @@ def main() -> None:
             print(f"      title={hit.paper.title}")
     except Exception as exc:  # noqa: BLE001
         print("\nEmbedding 检索未成功（通常是 Ollama embed 服务不可用）：")
+        print(f"  {exc}")
+
+    # 8) 推荐模块演示。
+    time_rows = recommand_service.recommend(algorithm="time", top_k=5)
+    print_recommand_rows("Recommand Time", time_rows)
+
+    interaction_rows = recommand_service.recommend(algorithm="interaction", top_k=5)
+    print_recommand_rows("Recommand Interaction", interaction_rows)
+
+    fusion_rows = recommand_service.recommend(top_k=5)  # default: fusion
+    print_recommand_rows("Recommand Fusion", fusion_rows)
+
+    try:
+        semantic_rows = recommand_service.recommend(
+            algorithm="semantic",
+            query="large language model reasoning",
+            top_k=5,
+        )
+        print_recommand_rows("Recommand Semantic", semantic_rows)
+    except Exception as exc:  # noqa: BLE001
+        print("\nRecommand semantic 未成功（通常是 embedding 检索不可用）：")
         print(f"  {exc}")
 
 

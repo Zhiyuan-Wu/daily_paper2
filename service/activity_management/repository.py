@@ -72,26 +72,28 @@ class PaperActivityRepository:
                         row["like"],
                     ),
                 )
-                created = self.get(record.id)
-                if not created:
-                    raise RuntimeError("activity row missing after upsert")
-                return created
+            else:
+                conn.execute(
+                    f"""
+                    INSERT INTO {self.table_name} (
+                        id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like"
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        row["id"],
+                        row["recommendation_records"],
+                        row["user_notes"],
+                        row["ai_report_summary"],
+                        row["ai_report_path"],
+                        row["like"],
+                    ),
+                )
 
-            conn.execute(
-                f"""
-                INSERT INTO {self.table_name} (
-                    id, recommendation_records, user_notes, ai_report_summary, ai_report_path, "like"
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    row["id"],
-                    row["recommendation_records"],
-                    row["user_notes"],
-                    row["ai_report_summary"],
-                    row["ai_report_path"],
-                    row["like"],
-                ),
-            )
+        if overwrite:
+            created = self.get(record.id)
+            if not created:
+                raise RuntimeError("activity row missing after upsert")
+            return created
         return record
 
     def get(self, paper_id: str) -> PaperActivityRecord | None:
