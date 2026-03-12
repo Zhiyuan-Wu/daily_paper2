@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import sys
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -57,8 +58,8 @@ class PaperParser:
         """OCR one image or multiple images from local path/base64/bytes."""
         image_list, is_batch = _to_list(images)
         texts: list[str] = []
-        for i,image in enumerate(image_list):
-            print(f"Processing pages {i+1}/{len(image_list)}...")
+        for i, image in enumerate(image_list):
+            print(f"Processing pages {i + 1}/{len(image_list)}...")
             b64 = self._image_input_to_base64(image)
             texts.append(self._ocr_with_ollama(b64))
         return texts if is_batch else texts[0]

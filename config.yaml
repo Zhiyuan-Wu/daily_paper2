@@ -29,6 +29,17 @@ paper_parse:
     prompt: "Text Recognition:"
     timeout_seconds: 300
 
+paper_embedding:
+  db_path: data/papers.db
+  embedding_table: paper_embeddings
+  version_table: paper_embedding_versions
+  default_top_k: 5
+  default_batch_size: 8
+  ollama:
+    endpoint: "http://localhost:11434/api/embed"
+    model: "qwen3-embedding:0.6b"
+    timeout_seconds: 120
+
 paper_activity:
   db_path: data/papers.db
   table_name: activity

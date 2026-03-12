@@ -9,6 +9,7 @@
 5. 查询某日的日报记录
 6. Hugging Face 指定日期查询（使用配置中的代理）
 7. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
+8. 增量构建论文向量库并执行语义检索（PaperEmbeddingService）
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Iterable
 
 from models.paper import PaperMetadata
 from service.fetch import PaperFetch
+from service.embedding import PaperEmbeddingService
 from service.parse import PaperParser
 from service.report_management import DailyReportManager
 
@@ -121,6 +123,31 @@ def main() -> None:
             print(f"  local_pdf_path={hf_downloaded.local_pdf_path}")
     except Exception as exc:  # noqa: BLE001
         print("\nHuggingFace 查询未成功（通常是代理不可用）：")
+        print(f"  {exc}")
+
+    # 6) 论文向量化增量同步 + 语义检索（依赖 Ollama embed 可用）。
+    try:
+        embedding_service = PaperEmbeddingService()  # 默认读取根目录 config.yaml
+        version = embedding_service.sync_incremental(limit=50)
+        print("\nEmbedding Sync:")
+        print(f"  version_id={version.id}")
+        print(f"  processed={version.processed_paper_count}")
+        print(f"  max_fetched_at={version.max_fetched_at}")
+        print(f"  model={version.embedding_model}")
+        print(f"  embedding_dim={version.embedding_dim}")
+
+        hits = embedding_service.search(
+            "large language model reasoning",
+            top_k=3,
+            fetched_from="2026-03-01",
+            fetched_to="2026-03-31",
+        )
+        print(f"\nSemantic Search Hits: {len(hits)}")
+        for idx, hit in enumerate(hits, start=1):
+            print(f"  [{idx}] id={hit.paper.id} distance={hit.distance:.6f}")
+            print(f"      title={hit.paper.title}")
+    except Exception as exc:  # noqa: BLE001
+        print("\nEmbedding 检索未成功（通常是 Ollama embed 服务不可用）：")
         print(f"  {exc}")
 
 
