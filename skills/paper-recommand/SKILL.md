@@ -1,10 +1,6 @@
 ---
 name: paper-recommand
-description: Generate today's daily paper report with fetch+parse workflow, persist report metadata to sqlite report table, and clean temporary workspace.
-metadata:
-  {
-    "openclaw": { "emoji": "🗒️", "requires": {} },
-  }
+description: Describe the best practice and useful tools for downloading recent paper from multiple online sources and generate a daily briefing for user.
 ---
 
 # Daily Paper Report Workflow
@@ -17,6 +13,14 @@ Objective: build a complete daily report, store final markdown in `data/reports/
 cd ~/.openclaw/workspace/daily_paper2
 source .venv/bin/activate
 ```
+
+CLI Tools you can use:
+- **paper_fetch_cli**: search online paper or download a specific paper.
+- **paper_parse_cli**: parse a pdf file into a markdown text file using OCR.
+- **paper_activity_cli**: CRUD for recording user notes / generated analysis etc. related to a paper.
+- **paper_report_cli**: CRUD for recording generated daily reports arctifact.
+
+(*Note: detailed CLI usage document are located at docs/XXX.md*) 
 
 ## Step 0: Initialize Runtime Variables and Temp Workspace
 
@@ -42,7 +46,6 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 RAW_JSON="$TMP_DIR/raw_metadata_${STAMP}.json"
 OVERVIEW_MD="$TMP_DIR/daily_paper_overview_${STAMP}.md"
-DEEPDIVE_MD="$TMP_DIR/daily_paper_deepdive_${STAMP}.md"
 FINAL_MD="data/reports/daily_paper_${TODAY}.md"
 
 mkdir -p data/reports
@@ -59,6 +62,8 @@ python scripts/paper_fetch_cli.py search-online \
   --limit 50 \
   > "$RAW_JSON"
 ```
+
+(*Note: Refer to docs/paper_fetch.md for detail CLI usage, e.g., --extra category=cs.AI*) 
 
 ## Step 2: Build Overview and Choose Target Paper
 
@@ -83,17 +88,14 @@ python scripts/paper_fetch_cli.py download <TARGET_PAPER_ID>
 python scripts/paper_parse_cli.py paper <TARGET_PAPER_ID>
 ```
 
+(*Note: Refer to docs/paper_parse.md for detail CLI usage.*) 
+
 ## Step 4: Deep Dive Analysis
 
 Action:
-1. Read parsed full text from `data/parsed/<TARGET_PAPER_ID>.md`.
-2. Write deep dive markdown to `$DEEPDIVE_MD`.
+1. For each `<TARGET_PAPER_ID>`, Spawn a subwokflow (subagent if possible) executing `skills/paper-analysis/SKILL.md`. This suppose to generate deep dive analysis report for each target paper at `data/analysis/paper_analysis_<paper_id>_<YYYY-MM-DD>.md`
 
-Required sections in `$DEEPDIVE_MD`:
-1. Background and target problem.
-2. Limitations of prior work.
-3. Core motivation and method.
-4. Quantitative results and conclusion.
+(*Note: You can ask to safely skip download/parse status check in paper-analysis workflow, as you just did them.*) 
 
 ## Step 5: Compose Final Daily Report
 
@@ -113,7 +115,7 @@ Rules:
 1. `report_id` must include today's date, example: `daily-2026-03-12`.
 2. `--report-date` must use `$TODAY`.
 3. `--local-md-path` must be `$FINAL_MD`.
-4. Pass `--paper-id` repeatedly for related papers (at least include target paper).
+4. Pass `--paper-id` repeatedly for related papers (must include target paper).
 
 Example command:
 
@@ -132,6 +134,8 @@ PY
   --overwrite
 ```
 
+(*Note: Refer to docs/paper_report.md for detail CLI usage.*)
+
 ## Step 7: Cleanup Temp Workspace
 
 ```bash
@@ -139,6 +143,3 @@ rm -rf "$TMP_DIR"
 trap - EXIT
 ```
 
-Deliverable:
-1. Final report file at `data/reports/daily_paper_<YYYY-MM-DD>.md`.
-2. One report row persisted in sqlite `report` table.
