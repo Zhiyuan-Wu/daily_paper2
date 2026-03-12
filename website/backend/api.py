@@ -91,19 +91,36 @@ def create_app(
         if not local_md_path:
             raise HTTPException(status_code=404, detail="Markdown path is empty")
 
-        path = Path(local_md_path)
-        if not path.is_absolute():
-            path = ROOT_DIR / path
-        if not path.exists() or not path.is_file():
-            raise HTTPException(status_code=404, detail="Markdown file not found")
-
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            raise HTTPException(status_code=500, detail=f"Failed to read markdown file: {exc}") from exc
+        path, content = _read_markdown_file(
+            local_md_path,
+            not_found_detail="Markdown file not found",
+            read_fail_prefix="Failed to read markdown file",
+        )
 
         return {
             "report_id": report_id,
+            "local_md_path": str(path),
+            "content": content,
+        }
+
+    @app.get("/api/papers/{paper_id}/ai-interpret-markdown")
+    def get_paper_ai_interpret_markdown(paper_id: str) -> dict[str, Any]:
+        detail = app.state.data_store.get_paper_detail(paper_id)
+        if not detail:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+        local_md_path = detail.get("ai_report_path") or ""
+        if not local_md_path:
+            raise HTTPException(status_code=404, detail="AI interpret markdown path is empty")
+
+        path, content = _read_markdown_file(
+            local_md_path,
+            not_found_detail="AI interpret markdown file not found",
+            read_fail_prefix="Failed to read AI interpret markdown file",
+        )
+
+        return {
+            "paper_id": paper_id,
             "local_md_path": str(path),
             "content": content,
         }
@@ -233,3 +250,23 @@ def _validate_iso_date(raw: str) -> str:
         return date.fromisoformat(raw).isoformat()
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD") from exc
+
+
+def _read_markdown_file(
+    raw_path: str,
+    *,
+    not_found_detail: str,
+    read_fail_prefix: str,
+) -> tuple[Path, str]:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        path = ROOT_DIR / path
+
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail=not_found_detail)
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"{read_fail_prefix}: {exc}") from exc
+    return path, content

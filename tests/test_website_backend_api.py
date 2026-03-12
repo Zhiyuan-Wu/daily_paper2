@@ -51,9 +51,13 @@ class FakeCommandBuilder:
 def _prepare_test_data(tmp_path: Path) -> tuple[TestClient, str, str]:
     db_path = tmp_path / "papers-test.db"
     markdown_dir = tmp_path / "reports"
+    analysis_dir = tmp_path / "analysis"
     markdown_dir.mkdir(parents=True, exist_ok=True)
+    analysis_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = markdown_dir / "daily-2026-03-11.md"
+    ai_markdown_path = analysis_dir / "paper_analysis_arxiv_2603.00001_2026-03-11.md"
     markdown_path.write_text("# Daily Report\n\n- item\n", encoding="utf-8")
+    ai_markdown_path.write_text("# AI Interpretation\n\n- key idea\n", encoding="utf-8")
 
     paper_repo = PaperRepository(db_path)
     paper_repo.upsert_papers(
@@ -92,7 +96,7 @@ def _prepare_test_data(tmp_path: Path) -> tuple[TestClient, str, str]:
             recommendation_records=["2026-03-11T08:00:00+00:00"],
             user_notes="initial note",
             ai_report_summary="summary",
-            ai_report_path="data/reports/a.md",
+            ai_report_path=str(ai_markdown_path),
             like=1,
         )
     )
@@ -153,6 +157,16 @@ def test_report_and_markdown_endpoints(tmp_path: Path) -> None:
     md_payload = markdown.json()
     assert md_payload["local_md_path"] == markdown_path
     assert "# Daily Report" in md_payload["content"]
+
+    ai_markdown = client.get("/api/papers/arxiv:2603.00001/ai-interpret-markdown")
+    assert ai_markdown.status_code == 200
+    ai_payload = ai_markdown.json()
+    assert ai_payload["paper_id"] == "arxiv:2603.00001"
+    assert "paper_analysis_arxiv_2603.00001_2026-03-11.md" in ai_payload["local_md_path"]
+    assert "# AI Interpretation" in ai_payload["content"]
+
+    ai_missing = client.get("/api/papers/arxiv:2603.00002/ai-interpret-markdown")
+    assert ai_missing.status_code == 404
 
     missing = client.get("/api/reports/by-date", params={"date": "2026-03-12"})
     assert missing.status_code == 404

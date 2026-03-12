@@ -3,6 +3,7 @@ import type {
   CreateTaskResponse,
   ExploreResponse,
   MarkdownResponse,
+  PaperMarkdownResponse,
   PaperRow,
   ReportRecord,
   TaskLogChunk,
@@ -54,6 +55,12 @@ export function getReportPapers(reportId: string): Promise<PaperRow[]> {
 
 export function getReportMarkdown(reportId: string): Promise<MarkdownResponse> {
   return request<MarkdownResponse>(`/api/reports/${encodeURIComponent(reportId)}/markdown`);
+}
+
+export function getPaperAiInterpretMarkdown(paperId: string): Promise<PaperMarkdownResponse> {
+  return request<PaperMarkdownResponse>(
+    `/api/papers/${encodeURIComponent(paperId)}/ai-interpret-markdown`,
+  );
 }
 
 export function generateReport(reportDate: string): Promise<CreateTaskResponse> {

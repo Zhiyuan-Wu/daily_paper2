@@ -20,6 +20,7 @@ import {
   createAiInterpretTask,
   generateReport,
   getPaperDetail,
+  getPaperAiInterpretMarkdown,
   getReportByDate,
   getReportMarkdown,
   getReportPapers,
@@ -52,6 +53,9 @@ export function DailyReportPage() {
   const [detailPaperId, setDetailPaperId] = useState<string | null>(null);
   const [notePaper, setNotePaper] = useState<PaperRow | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
+  const [aiMarkdownPaper, setAiMarkdownPaper] = useState<PaperRow | null>(null);
+  const [aiMarkdownPath, setAiMarkdownPath] = useState('');
+  const [aiMarkdownContent, setAiMarkdownContent] = useState('');
   const [aiSubmittingIds, setAiSubmittingIds] = useState<Set<string>>(new Set());
   const [likeSubmittingIds, setLikeSubmittingIds] = useState<Set<string>>(new Set());
 
@@ -297,12 +301,36 @@ export function DailyReportPage() {
               }
               window.open(target, '_blank', 'noopener,noreferrer');
             }}
-            onAIInterpret={(paper) => {
+            onAIInterpret={async (paper) => {
               setAiSubmittingIds((current) => {
                 const next = new Set(current);
                 next.add(paper.id);
                 return next;
               });
+
+              try {
+                const markdown = await getPaperAiInterpretMarkdown(paper.id);
+                setAiSubmittingIds((current) => {
+                  const next = new Set(current);
+                  next.delete(paper.id);
+                  return next;
+                });
+                setAiMarkdownPaper(paper);
+                setAiMarkdownPath(markdown.local_md_path);
+                setAiMarkdownContent(markdown.content);
+                return;
+              } catch (error) {
+                if (!(error instanceof ApiError) || error.status !== 404) {
+                  setAiSubmittingIds((current) => {
+                    const next = new Set(current);
+                    next.delete(paper.id);
+                    return next;
+                  });
+                  messageApi.error(`AI解读读取失败: ${(error as Error).message}`);
+                  return;
+                }
+              }
+
               aiMutation.mutate(paper.id);
             }}
             onAddNote={(paper) => {
@@ -394,6 +422,26 @@ export function DailyReportPage() {
           style={{ width: '100%', borderRadius: 8, border: '1px solid #d9d9d9', padding: 10 }}
           placeholder="输入你的笔记"
         />
+      </Modal>
+
+      <Modal
+        title={aiMarkdownPaper ? `AI解读 - ${aiMarkdownPaper.title}` : 'AI解读'}
+        open={Boolean(aiMarkdownPaper)}
+        onCancel={() => {
+          setAiMarkdownPaper(null);
+          setAiMarkdownPath('');
+          setAiMarkdownContent('');
+        }}
+        footer={null}
+        width={900}
+        destroyOnClose
+      >
+        {aiMarkdownPath ? (
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+            文件路径: {aiMarkdownPath}
+          </Typography.Paragraph>
+        ) : null}
+        <MarkdownViewer content={aiMarkdownContent} />
       </Modal>
     </Space>
   );

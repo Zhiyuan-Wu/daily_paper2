@@ -18,13 +18,16 @@ import {
 import { useMemo, useState } from 'react';
 
 import {
+  ApiError,
   createAiInterpretTask,
   getExplorePapers,
+  getPaperAiInterpretMarkdown,
   getPaperDetail,
   updatePaperLike,
   updatePaperNotes,
 } from '../api/client';
 import type { PaperRow } from '../api/types';
+import { MarkdownViewer } from '../components/MarkdownViewer';
 import { PaperTable } from '../components/PaperTable';
 
 const SOURCE_OPTIONS = [
@@ -56,6 +59,9 @@ export function PaperExplorePage() {
   const [detailPaperId, setDetailPaperId] = useState<string | null>(null);
   const [notePaper, setNotePaper] = useState<PaperRow | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
+  const [aiMarkdownPaper, setAiMarkdownPaper] = useState<PaperRow | null>(null);
+  const [aiMarkdownPath, setAiMarkdownPath] = useState('');
+  const [aiMarkdownContent, setAiMarkdownContent] = useState('');
   const [aiSubmittingIds, setAiSubmittingIds] = useState<Set<string>>(new Set());
   const [likeSubmittingIds, setLikeSubmittingIds] = useState<Set<string>>(new Set());
 
@@ -153,12 +159,36 @@ export function PaperExplorePage() {
     window.open(target, '_blank', 'noopener,noreferrer');
   };
 
-  const submitAIInterpret = (paper: PaperRow) => {
+  const submitAIInterpret = async (paper: PaperRow) => {
     setAiSubmittingIds((current) => {
       const next = new Set(current);
       next.add(paper.id);
       return next;
     });
+
+    try {
+      const markdown = await getPaperAiInterpretMarkdown(paper.id);
+      setAiSubmittingIds((current) => {
+        const next = new Set(current);
+        next.delete(paper.id);
+        return next;
+      });
+      setAiMarkdownPaper(paper);
+      setAiMarkdownPath(markdown.local_md_path);
+      setAiMarkdownContent(markdown.content);
+      return;
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) {
+        setAiSubmittingIds((current) => {
+          const next = new Set(current);
+          next.delete(paper.id);
+          return next;
+        });
+        messageApi.error(`AI解读读取失败: ${(error as Error).message}`);
+        return;
+      }
+    }
+
     aiMutation.mutate(paper.id);
   };
 
@@ -363,6 +393,26 @@ export function PaperExplorePage() {
           onChange={(event) => setNoteDraft(event.target.value)}
           placeholder="输入你的笔记"
         />
+      </Modal>
+
+      <Modal
+        title={aiMarkdownPaper ? `AI解读 - ${aiMarkdownPaper.title}` : 'AI解读'}
+        open={Boolean(aiMarkdownPaper)}
+        onCancel={() => {
+          setAiMarkdownPaper(null);
+          setAiMarkdownPath('');
+          setAiMarkdownContent('');
+        }}
+        footer={null}
+        width={900}
+        destroyOnClose
+      >
+        {aiMarkdownPath ? (
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+            文件路径: {aiMarkdownPath}
+          </Typography.Paragraph>
+        ) : null}
+        <MarkdownViewer content={aiMarkdownContent} />
       </Modal>
     </Space>
   );

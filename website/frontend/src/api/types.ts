@@ -39,6 +39,12 @@ export interface MarkdownResponse {
   content: string;
 }
 
+export interface PaperMarkdownResponse {
+  paper_id: string;
+  local_md_path: string;
+  content: string;
+}
+
 export interface ActivityRecord {
   id: string;
   recommendation_records: string[];
