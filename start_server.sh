@@ -44,8 +44,7 @@ cd "$ROOT_DIR"
 
 "$PYTHON_BIN" -m uvicorn website.backend.main:app \
   --host "$BACKEND_HOST" \
-  --port "$BACKEND_PORT" \
-  --reload &
+  --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 
 echo "backend: http://$BACKEND_HOST:$BACKEND_PORT"

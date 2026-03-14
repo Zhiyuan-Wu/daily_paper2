@@ -27,12 +27,6 @@ class GenerateReportRequest(BaseModel):
     report_date: str | None = None
 
 
-class GenericTaskRequest(BaseModel):
-    task_type: str
-    command: list[str]
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class StopTaskResponse(BaseModel):
     task: dict[str, Any]
 
@@ -195,18 +189,6 @@ def create_app(
             task_type=task_type,
             command=command,
             metadata=metadata,
-        )
-        return {"task_id": task["task_id"], "status": task["status"], "task": task}
-
-    @app.post("/api/tasks")
-    def create_generic_task(payload: GenericTaskRequest) -> dict[str, Any]:
-        if not payload.command:
-            raise HTTPException(status_code=422, detail="command must not be empty")
-
-        task = app.state.task_manager.create_task(
-            task_type=payload.task_type,
-            command=payload.command,
-            metadata=payload.metadata,
         )
         return {"task_id": task["task_id"], "status": task["status"], "task": task}
 

@@ -19,6 +19,10 @@ from website.backend.settings import BackendSettings
 
 
 class FakeCommandBuilder:
+    def __init__(self, *, report_sleep_seconds: float = 0.1, analysis_sleep_seconds: float = 0.1):
+        self.report_sleep_seconds = report_sleep_seconds
+        self.analysis_sleep_seconds = analysis_sleep_seconds
+
     def build_report_generation(self, report_date: str):
         command = [
             sys.executable,
@@ -26,7 +30,7 @@ class FakeCommandBuilder:
             (
                 "import time; "
                 f"print('report-{report_date}', flush=True); "
-                "time.sleep(0.1); "
+                f"time.sleep({self.report_sleep_seconds}); "
                 "print('report-done', flush=True)"
             ),
         ]
@@ -40,7 +44,7 @@ class FakeCommandBuilder:
             (
                 "import time; "
                 f"print('analysis-{paper_id}', flush=True); "
-                "time.sleep(0.1); "
+                f"time.sleep({self.analysis_sleep_seconds}); "
                 "print('analysis-done', flush=True)"
             ),
         ]
@@ -48,7 +52,11 @@ class FakeCommandBuilder:
         return command, metadata, "paper_analysis"
 
 
-def _prepare_test_data(tmp_path: Path) -> tuple[TestClient, str, str]:
+def _prepare_test_data(
+    tmp_path: Path,
+    *,
+    command_builder: FakeCommandBuilder | None = None,
+) -> tuple[TestClient, str, str]:
     db_path = tmp_path / "papers-test.db"
     markdown_dir = tmp_path / "reports"
     analysis_dir = tmp_path / "analysis"
@@ -118,7 +126,7 @@ def _prepare_test_data(tmp_path: Path) -> tuple[TestClient, str, str]:
         skills_dir=tmp_path / "skills",
         cors_origins=["*"],
     )
-    app = create_app(settings=settings, command_builder=FakeCommandBuilder())
+    app = create_app(settings=settings, command_builder=command_builder or FakeCommandBuilder())
     return TestClient(app), str(markdown_path), str(db_path)
 
 
@@ -221,7 +229,10 @@ def test_explore_detail_notes_like_and_db_update(tmp_path: Path) -> None:
 
 
 def test_task_flow_for_report_ai_and_stop(tmp_path: Path) -> None:
-    client, _, _ = _prepare_test_data(tmp_path)
+    client, _, _ = _prepare_test_data(
+        tmp_path,
+        command_builder=FakeCommandBuilder(report_sleep_seconds=2.0, analysis_sleep_seconds=0.1),
+    )
 
     report_task_res = client.post("/api/reports/generate", json={"report_date": "2026-03-11"})
     assert report_task_res.status_code == 200
@@ -239,28 +250,23 @@ def test_task_flow_for_report_ai_and_stop(tmp_path: Path) -> None:
     ai_status = _wait_for_terminal(client, ai_task_id)
     assert ai_status == "success"
 
-    long_task = client.post(
-        "/api/tasks",
-        json={
-            "task_type": "long_task",
-            "command": [
-                sys.executable,
-                "-c",
-                "import time; print('start', flush=True); time.sleep(2); print('end', flush=True)",
-            ],
-            "metadata": {"origin": "test"},
-        },
-    )
-    assert long_task.status_code == 200
-    long_task_id = long_task.json()["task_id"]
+    stoppable_task = client.post("/api/reports/generate", json={"report_date": "2026-03-12"})
+    assert stoppable_task.status_code == 200
+    stoppable_task_id = stoppable_task.json()["task_id"]
 
     # Give the process enough time to start, then stop it.
     time.sleep(0.2)
-    stop = client.post(f"/api/tasks/{long_task_id}/stop")
+    stop = client.post(f"/api/tasks/{stoppable_task_id}/stop")
     assert stop.status_code == 200
 
-    stopped_status = _wait_for_terminal(client, long_task_id)
+    stopped_status = _wait_for_terminal(client, stoppable_task_id)
     assert stopped_status == "stopped"
+
+    generic_create = client.post(
+        "/api/tasks",
+        json={"task_type": "long_task", "command": [sys.executable, "-c", "print('x')"], "metadata": {}},
+    )
+    assert generic_create.status_code == 405
 
     running = client.get("/api/tasks", params={"status": "running"})
     assert running.status_code == 200

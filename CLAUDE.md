@@ -102,7 +102,17 @@ The backend uses a skill-based task execution system for long-running AI workflo
 - `skills/paper-analysis/SKILL.md` - Deep paper interpretation workflow (fetch → parse → question-driven analysis → report generation)
 - `skills/paper-recommand/SKILL.md` - Daily report generation workflow
 
-Skills are triggered via API endpoints (`POST /api/tasks/paper-analysis`, `POST /api/tasks/daily-report`) and run asynchronously with real-time log streaming.
+Skills are triggered via controlled API endpoints:
+- `POST /api/reports/generate` (daily report workflow)
+- `POST /api/papers/{paper_id}/ai-interpret` (paper analysis workflow)
+
+Task observation/control endpoints are:
+- `GET /api/tasks`
+- `GET /api/tasks/{task_id}`
+- `GET /api/tasks/{task_id}/logs`
+- `POST /api/tasks/{task_id}/stop`
+
+Direct generic task creation via `POST /api/tasks` is intentionally not exposed.
 
 ### Database Schema
 
