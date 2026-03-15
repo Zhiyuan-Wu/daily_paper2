@@ -103,3 +103,8 @@ def test_invalid_like_value_raises(tmp_path: Path) -> None:
     manager = PaperActivityManager(db_path=tmp_path / "papers.db")
     with pytest.raises(ValueError):
         manager.create_activity("bad:1", like=2)
+
+
+def test_invalid_table_name_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        PaperActivityManager(db_path=tmp_path / "papers.db", table_name='activity;DROP TABLE papers;')

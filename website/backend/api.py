@@ -39,6 +39,7 @@ def create_app(
     command_builder: SkillCommandBuilder | None = None,
 ) -> FastAPI:
     cfg = settings or load_settings()
+    allowed_markdown_roots = _build_allowed_markdown_roots(cfg)
 
     app = FastAPI(title="daily_paper2 backend", version="1.0.0")
 
@@ -87,6 +88,7 @@ def create_app(
 
         path, content = _read_markdown_file(
             local_md_path,
+            allowed_roots=allowed_markdown_roots,
             not_found_detail="Markdown file not found",
             read_fail_prefix="Failed to read markdown file",
         )
@@ -109,6 +111,7 @@ def create_app(
 
         path, content = _read_markdown_file(
             local_md_path,
+            allowed_roots=allowed_markdown_roots,
             not_found_detail="AI interpret markdown file not found",
             read_fail_prefix="Failed to read AI interpret markdown file",
         )
@@ -237,18 +240,53 @@ def _validate_iso_date(raw: str) -> str:
 def _read_markdown_file(
     raw_path: str,
     *,
+    allowed_roots: list[Path],
     not_found_detail: str,
     read_fail_prefix: str,
 ) -> tuple[Path, str]:
     path = Path(raw_path)
-    if not path.is_absolute():
-        path = ROOT_DIR / path
+    if path.is_absolute():
+        raise HTTPException(status_code=400, detail="Markdown path must be relative")
 
-    if not path.exists() or not path.is_file():
+    resolved_path: Path | None = None
+    candidate_bases = [ROOT_DIR, *allowed_roots]
+    seen_candidates: set[str] = set()
+
+    for base in candidate_bases:
+        candidate = (base.resolve() / path).resolve()
+        marker = str(candidate)
+        if marker in seen_candidates:
+            continue
+        seen_candidates.add(marker)
+
+        if not any(candidate.is_relative_to(root.resolve()) for root in allowed_roots):
+            continue
+
+        resolved_path = candidate
+        if candidate.exists() and candidate.is_file():
+            break
+    else:
+        raise HTTPException(status_code=404, detail=not_found_detail)
+
+    if resolved_path is None or not resolved_path.exists() or not resolved_path.is_file():
         raise HTTPException(status_code=404, detail=not_found_detail)
 
     try:
-        content = path.read_text(encoding="utf-8")
+        content = resolved_path.read_text(encoding="utf-8")
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"{read_fail_prefix}: {exc}") from exc
-    return path, content
+    return resolved_path, content
+
+
+def _build_allowed_markdown_roots(cfg: BackendSettings) -> list[Path]:
+    roots = [ROOT_DIR / "data", cfg.db_path.parent]
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        resolved = root.resolve()
+        marker = str(resolved)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append(resolved)
+    return unique

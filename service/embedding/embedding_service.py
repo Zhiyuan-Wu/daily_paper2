@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from models.paper import PaperMetadata
-from models.paper_embedding import PaperEmbeddingRecord, PaperEmbeddingVersion, PaperSearchHit
+from models.paper_embedding import PaperEmbeddingRecord, PaperEmbeddingSyncResult, PaperSearchHit
 from service.embedding.config import get_paper_embedding_config
 from service.embedding.ollama_client import OllamaEmbeddingClient
 from service.embedding.repository import PaperEmbeddingRepository
@@ -21,7 +21,6 @@ class PaperEmbeddingService:
         self,
         db_path: str | Path | None = None,
         embedding_table: str | None = None,
-        version_table: str | None = None,
         ollama_endpoint: str | None = None,
         ollama_model: str | None = None,
         ollama_timeout: int | None = None,
@@ -35,9 +34,6 @@ class PaperEmbeddingService:
         self.db_path = Path(db_path or _as_str(cfg.get("db_path"), "paper_embedding.db_path"))
         self.embedding_table = embedding_table or _as_str(
             cfg.get("embedding_table"), "paper_embedding.embedding_table"
-        )
-        self.version_table = version_table or _as_str(
-            cfg.get("version_table"), "paper_embedding.version_table"
         )
 
         self.default_top_k = (
@@ -71,7 +67,6 @@ class PaperEmbeddingService:
         self.repo = PaperEmbeddingRepository(
             self.db_path,
             embedding_table=self.embedding_table,
-            version_table=self.version_table,
         )
 
     def embed_text(self, text: str) -> list[float]:
@@ -86,31 +81,23 @@ class PaperEmbeddingService:
     def sync_incremental(
         self,
         *,
-        limit: int | None = None,
         batch_size: int | None = None,
         force_full: bool = False,
-    ) -> PaperEmbeddingVersion:
-        """Incrementally compute embeddings by ``papers.fetched_at`` and persist them."""
-        latest = self.repo.get_latest_version()
-        since = None if force_full else (latest.max_fetched_at if latest else None)
+    ) -> PaperEmbeddingSyncResult:
+        """Incrementally compute embeddings for papers without stored embeddings."""
         if force_full:
             self.repo.clear_embeddings()
-        if latest and latest.embedding_model and latest.embedding_model != self.ollama_model:
-            since = None
-            self.repo.clear_embeddings()
 
-        papers = self.repo.list_papers_for_embedding(since_fetched_at=since, limit=limit)
+        papers = self.repo.list_papers_for_embedding()
         if not papers:
             max_fetched_at = self.repo.get_max_papers_fetched_at()
-            version = PaperEmbeddingVersion(
-                id=None,
+            return PaperEmbeddingSyncResult(
                 synced_at=_utc_now(),
                 max_fetched_at=max_fetched_at,
                 processed_paper_count=0,
                 embedding_model=self.ollama_model,
-                embedding_dim=latest.embedding_dim if latest else 0,
+                embedding_dim=0,
             )
-            return self.repo.save_version(version)
 
         resolved_batch_size = batch_size if batch_size is not None else self.default_batch_size
         semantic_texts = [self.compose_semantic_text(paper) for paper in papers]
@@ -140,15 +127,13 @@ class PaperEmbeddingService:
             )
 
         self.repo.upsert_embeddings(records)
-        version = PaperEmbeddingVersion(
-            id=None,
+        return PaperEmbeddingSyncResult(
             synced_at=embedded_at,
-            max_fetched_at=max(paper.fetched_at for paper in papers),
+            max_fetched_at=papers[-1].fetched_at,
             processed_paper_count=len(records),
             embedding_model=self.ollama_model,
             embedding_dim=dim,
         )
-        return self.repo.save_version(version)
 
     def search(
         self,
@@ -172,10 +157,6 @@ class PaperEmbeddingService:
             fetched_to=_as_datetime(fetched_to, end_of_day=True),
         )
         return [PaperSearchHit(paper=paper, distance=distance) for paper, distance in rows]
-
-    def get_latest_version(self) -> PaperEmbeddingVersion | None:
-        """Return latest sync checkpoint."""
-        return self.repo.get_latest_version()
 
     @staticmethod
     def compose_semantic_text(paper: PaperMetadata) -> str:
@@ -205,10 +186,6 @@ class PaperEmbeddingService:
             if isinstance(value, datetime):
                 payload[key] = value.isoformat()
         return {"paper": payload, "distance": hit.distance}
-
-
-# Backward-compatible alias for requested naming style.
-Paper_Embedding_Service = PaperEmbeddingService
 
 
 def _collect_keywords(paper: PaperMetadata) -> list[str]:

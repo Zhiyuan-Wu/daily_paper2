@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,21 +15,23 @@ except ImportError:  # pragma: no cover - fallback for environments without pysq
     import sqlite3
 
 from models.paper import PaperMetadata
-from models.paper_embedding import PaperEmbeddingRecord, PaperEmbeddingVersion
+from models.paper_embedding import PaperEmbeddingRecord
+from service.common.sqlite_utils import validate_table_name
+
+_VECTOR_DIM_PATTERN = re.compile(r"embedding\s+float\[(\d+)\]")
 
 
 class PaperEmbeddingRepository:
-    """Persistence layer for embedding vectors and sync versions."""
+    """Persistence layer for embedding vectors."""
 
     def __init__(
         self,
         db_path: str | Path,
         embedding_table: str = "paper_embeddings",
-        version_table: str = "paper_embedding_versions",
     ) -> None:
         self.db_path = Path(db_path)
-        self.embedding_table = embedding_table
-        self.version_table = version_table
+        self.embedding_table = validate_table_name(embedding_table)
+        self.vector_table = validate_table_name(f"{self.embedding_table}_vec")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
@@ -83,24 +86,8 @@ class PaperEmbeddingRepository:
                 """
             )
             conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS {self.version_table} (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    synced_at TEXT NOT NULL,
-                    max_fetched_at TEXT,
-                    processed_paper_count INTEGER NOT NULL,
-                    embedding_model TEXT NOT NULL,
-                    embedding_dim INTEGER NOT NULL
-                )
-                """
-            )
-            conn.execute(
                 f"CREATE INDEX IF NOT EXISTS idx_{self.embedding_table}_fetched_at "
                 f"ON {self.embedding_table}(fetched_at)"
-            )
-            conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{self.version_table}_max_fetched_at "
-                f"ON {self.version_table}(max_fetched_at)"
             )
 
     @staticmethod
@@ -129,14 +116,47 @@ class PaperEmbeddingRepository:
             ) from exc
         return sqlite_vec.serialize_float32(values)
 
-    def get_latest_version(self) -> PaperEmbeddingVersion | None:
-        with self._conn() as conn:
-            row = conn.execute(
-                f"SELECT * FROM {self.version_table} ORDER BY id DESC LIMIT 1"
-            ).fetchone()
-            if not row:
-                return None
-            return PaperEmbeddingVersion.from_db_row(dict(row))
+    @staticmethod
+    def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?",
+            (table_name,),
+        ).fetchone()
+        return row is not None
+
+    def _get_vector_dim(self, conn: sqlite3.Connection) -> int | None:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+            (self.vector_table,),
+        ).fetchone()
+        if not row:
+            return None
+        sql = str((row["sql"] or "")).lower()
+        matched = _VECTOR_DIM_PATTERN.search(sql)
+        if not matched:
+            return None
+        return int(matched.group(1))
+
+    def _ensure_vector_index(self, conn: sqlite3.Connection, dim: int) -> None:
+        if dim <= 0:
+            raise ValueError("embedding_dim must be greater than 0")
+
+        current_dim = self._get_vector_dim(conn)
+        if current_dim == dim:
+            return
+
+        if current_dim is not None:
+            conn.execute(f"DROP TABLE {self.vector_table}")
+
+        conn.execute(
+            f"""
+            CREATE VIRTUAL TABLE {self.vector_table}
+            USING vec0(
+                paper_id TEXT PRIMARY KEY,
+                embedding FLOAT[{dim}] distance_metric=cosine
+            )
+            """
+        )
 
     def get_max_papers_fetched_at(self) -> datetime | None:
         with self._conn() as conn:
@@ -148,35 +168,32 @@ class PaperEmbeddingRepository:
                 return None
             return _from_iso(value)
 
-    def list_papers_for_embedding(
-        self,
-        since_fetched_at: datetime | None = None,
-        limit: int | None = None,
-    ) -> list[PaperMetadata]:
-        params: list[object] = []
-        where = ["fetched_at IS NOT NULL"]
-        if since_fetched_at is not None:
-            where.append("fetched_at > ?")
-            params.append(since_fetched_at.isoformat())
-
-        sql = "SELECT * FROM papers"
-        if where:
-            sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY fetched_at ASC"
-        if limit is not None:
-            sql += " LIMIT ?"
-            params.append(limit)
-
+    def list_papers_for_embedding(self) -> list[PaperMetadata]:
         with self._conn() as conn:
-            rows = conn.execute(sql, params).fetchall()
+            rows = conn.execute(
+                f"""
+                SELECT p.*
+                FROM papers p
+                LEFT JOIN {self.embedding_table} e ON e.paper_id = p.id
+                WHERE p.fetched_at IS NOT NULL AND e.paper_id IS NULL
+                ORDER BY p.fetched_at ASC, p.id ASC
+                """
+            ).fetchall()
             return [self._row_to_metadata(row) for row in rows]
 
     def upsert_embeddings(self, records: list[PaperEmbeddingRecord]) -> None:
         if not records:
             return
 
+        dims = {record.embedding_dim for record in records}
+        if len(dims) != 1:
+            raise ValueError("Batch embeddings must share the same embedding_dim")
+        dim = next(iter(dims))
+
         with self._conn() as conn:
+            self._ensure_vector_index(conn, dim)
             for item in records:
+                serialized = self._serialize_vector(item.embedding)
                 conn.execute(
                     f"""
                     INSERT INTO {self.embedding_table} (
@@ -194,33 +211,22 @@ class PaperEmbeddingRepository:
                     (
                         item.paper_id,
                         item.meta_text,
-                        self._serialize_vector(item.embedding),
+                        serialized,
                         item.fetched_at.isoformat(),
                         item.embedded_at.isoformat(),
                         item.embedding_model,
                         item.embedding_dim,
                     ),
                 )
-
-    def save_version(self, version: PaperEmbeddingVersion) -> PaperEmbeddingVersion:
-        with self._conn() as conn:
-            cursor = conn.execute(
-                f"""
-                INSERT INTO {self.version_table} (
-                    synced_at, max_fetched_at, processed_paper_count,
-                    embedding_model, embedding_dim
-                ) VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    version.synced_at.isoformat(),
-                    version.max_fetched_at.isoformat() if version.max_fetched_at else None,
-                    version.processed_paper_count,
-                    version.embedding_model,
-                    version.embedding_dim,
-                ),
-            )
-            version.id = int(cursor.lastrowid)
-        return version
+                updated = conn.execute(
+                    f"UPDATE {self.vector_table} SET embedding = ? WHERE paper_id = ?",
+                    (serialized, item.paper_id),
+                )
+                if updated.rowcount == 0:
+                    conn.execute(
+                        f"INSERT INTO {self.vector_table} (paper_id, embedding) VALUES (?, ?)",
+                        (item.paper_id, serialized),
+                    )
 
     def count_embeddings(self) -> int:
         with self._conn() as conn:
@@ -230,6 +236,8 @@ class PaperEmbeddingRepository:
     def clear_embeddings(self) -> None:
         with self._conn() as conn:
             conn.execute(f"DELETE FROM {self.embedding_table}")
+            if self._table_exists(conn, self.vector_table):
+                conn.execute(f"DELETE FROM {self.vector_table}")
 
     def search(
         self,
@@ -244,6 +252,111 @@ class PaperEmbeddingRepository:
         if top_k <= 0:
             raise ValueError("top_k must be greater than 0")
 
+        with self._conn() as conn:
+            if not self._table_exists(conn, self.vector_table):
+                rows = self._search_full_scan(
+                    conn,
+                    query_embedding,
+                    top_k,
+                    published_from=published_from,
+                    published_to=published_to,
+                    fetched_from=fetched_from,
+                    fetched_to=fetched_to,
+                )
+            else:
+                rows = self._search_with_vector_index(
+                    conn,
+                    query_embedding,
+                    top_k,
+                    published_from=published_from,
+                    published_to=published_to,
+                    fetched_from=fetched_from,
+                    fetched_to=fetched_to,
+                )
+
+        output: list[tuple[PaperMetadata, float]] = []
+        for row in rows:
+            if row["distance"] is None:
+                continue
+            metadata = self._row_to_metadata(row)
+            output.append((metadata, float(row["distance"])))
+        return output
+
+    def _search_with_vector_index(
+        self,
+        conn: sqlite3.Connection,
+        query_embedding: list[float],
+        top_k: int,
+        *,
+        published_from: datetime | None = None,
+        published_to: datetime | None = None,
+        fetched_from: datetime | None = None,
+        fetched_to: datetime | None = None,
+    ) -> list[sqlite3.Row]:
+        total_row = conn.execute(
+            f"SELECT COUNT(*) AS c FROM {self.vector_table}"
+        ).fetchone()
+        total_candidates = int((total_row or {"c": 0})["c"])
+        if total_candidates <= 0:
+            return []
+
+        query_blob = self._serialize_vector(query_embedding)
+        where: list[str] = ["e.embedding_dim = ?"]
+        where_params: list[object] = [len(query_embedding)]
+
+        if published_from is not None:
+            where.append("p.published_at >= ?")
+            where_params.append(published_from.isoformat())
+        if published_to is not None:
+            where.append("p.published_at <= ?")
+            where_params.append(published_to.isoformat())
+        if fetched_from is not None:
+            where.append("p.fetched_at >= ?")
+            where_params.append(fetched_from.isoformat())
+        if fetched_to is not None:
+            where.append("p.fetched_at <= ?")
+            where_params.append(fetched_to.isoformat())
+
+        where_sql = "WHERE " + " AND ".join(where)
+        has_time_filters = any(value is not None for value in [published_from, published_to, fetched_from, fetched_to])
+
+        k = min(total_candidates, max(top_k * (12 if has_time_filters else 8), top_k))
+        while True:
+            params: list[object] = [query_blob, k, *where_params, top_k]
+            rows = conn.execute(
+                f"""
+                SELECT p.*, idx.distance AS distance
+                FROM (
+                    SELECT paper_id, distance
+                    FROM {self.vector_table}
+                    WHERE embedding MATCH ? AND k = ?
+                ) idx
+                JOIN {self.embedding_table} e ON e.paper_id = idx.paper_id
+                JOIN papers p ON p.id = idx.paper_id
+                {where_sql}
+                ORDER BY idx.distance ASC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+            if len(rows) >= top_k or k >= total_candidates:
+                return rows
+            next_k = min(total_candidates, k * 2)
+            if next_k == k:
+                return rows
+            k = next_k
+
+    def _search_full_scan(
+        self,
+        conn: sqlite3.Connection,
+        query_embedding: list[float],
+        top_k: int,
+        *,
+        published_from: datetime | None = None,
+        published_to: datetime | None = None,
+        fetched_from: datetime | None = None,
+        fetched_to: datetime | None = None,
+    ) -> list[sqlite3.Row]:
         params: list[object] = [self._serialize_vector(query_embedding)]
         where: list[str] = ["e.embedding_dim = ?"]
         params.append(len(query_embedding))
@@ -265,26 +378,17 @@ class PaperEmbeddingRepository:
             where_sql = "WHERE " + " AND ".join(where)
 
         params.append(top_k)
-        with self._conn() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT p.*, vec_distance_cosine(e.embedding, ?) AS distance
-                FROM {self.embedding_table} e
-                JOIN papers p ON p.id = e.paper_id
-                {where_sql}
-                ORDER BY distance ASC
-                LIMIT ?
-                """,
-                params,
-            ).fetchall()
-
-        output: list[tuple[PaperMetadata, float]] = []
-        for row in rows:
-            if row["distance"] is None:
-                continue
-            metadata = self._row_to_metadata(row)
-            output.append((metadata, float(row["distance"])))
-        return output
+        return conn.execute(
+            f"""
+            SELECT p.*, vec_distance_cosine(e.embedding, ?) AS distance
+            FROM {self.embedding_table} e
+            JOIN papers p ON p.id = e.paper_id
+            {where_sql}
+            ORDER BY distance ASC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
 
     @staticmethod
     def _row_to_metadata(row: sqlite3.Row) -> PaperMetadata:

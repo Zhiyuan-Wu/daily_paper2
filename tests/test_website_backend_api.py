@@ -14,8 +14,8 @@ from models.paper_report import PaperReportRecord
 from service.activity_management.repository import PaperActivityRepository
 from service.fetch.repository import PaperRepository
 from service.report_management.repository import PaperReportRepository
-from website.backend.api import create_app
-from website.backend.settings import BackendSettings
+from website.backend.api import _build_allowed_markdown_roots, _read_markdown_file, create_app
+from website.backend.settings import BackendSettings, ROOT_DIR
 
 
 class FakeCommandBuilder:
@@ -66,6 +66,8 @@ def _prepare_test_data(
     ai_markdown_path = analysis_dir / "paper_analysis_arxiv_2603.00001_2026-03-11.md"
     markdown_path.write_text("# Daily Report\n\n- item\n", encoding="utf-8")
     ai_markdown_path.write_text("# AI Interpretation\n\n- key idea\n", encoding="utf-8")
+    markdown_rel_path = markdown_path.relative_to(tmp_path)
+    ai_markdown_rel_path = ai_markdown_path.relative_to(tmp_path)
 
     paper_repo = PaperRepository(db_path)
     paper_repo.upsert_papers(
@@ -104,7 +106,7 @@ def _prepare_test_data(
             recommendation_records=["2026-03-11T08:00:00+00:00"],
             user_notes="initial note",
             ai_report_summary="summary",
-            ai_report_path=str(ai_markdown_path),
+            ai_report_path=str(ai_markdown_rel_path),
             like=1,
         )
     )
@@ -116,7 +118,7 @@ def _prepare_test_data(
             report_date="2026-03-11",
             generated_at="2026-03-11T09:00:00+00:00",
             related_paper_ids=["arxiv:2603.00001", "arxiv:2603.00002"],
-            local_md_path=str(markdown_path),
+            local_md_path=str(markdown_rel_path),
         )
     )
 
@@ -144,7 +146,7 @@ def _wait_for_terminal(client: TestClient, task_id: str, timeout: float = 4.0) -
 
 
 def test_report_and_markdown_endpoints(tmp_path: Path) -> None:
-    client, markdown_path, _ = _prepare_test_data(tmp_path)
+    client, markdown_path, db_path = _prepare_test_data(tmp_path)
 
     res = client.get("/api/reports/by-date", params={"date": "2026-03-11"})
     assert res.status_code == 200
@@ -178,6 +180,27 @@ def test_report_and_markdown_endpoints(tmp_path: Path) -> None:
 
     missing = client.get("/api/reports/by-date", params={"date": "2026-03-12"})
     assert missing.status_code == 404
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "UPDATE report SET local_md_path = ? WHERE id = ?",
+            ("/etc/hosts", "daily-2026-03-11"),
+        )
+        conn.execute(
+            "UPDATE activity SET ai_report_path = ? WHERE id = ?",
+            ("../../etc/hosts", "arxiv:2603.00001"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    report_abs = client.get("/api/reports/daily-2026-03-11/markdown")
+    assert report_abs.status_code == 400
+    assert report_abs.json()["detail"] == "Markdown path must be relative"
+
+    ai_traversal = client.get("/api/papers/arxiv:2603.00001/ai-interpret-markdown")
+    assert ai_traversal.status_code == 404
 
 
 def test_explore_detail_notes_like_and_db_update(tmp_path: Path) -> None:
@@ -226,6 +249,33 @@ def test_explore_detail_notes_like_and_db_update(tmp_path: Path) -> None:
         assert row[1] == -1
     finally:
         conn.close()
+
+
+def test_read_markdown_file_accepts_project_root_relative_data_path(tmp_path: Path) -> None:
+    reports_dir = ROOT_DIR / "data" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = reports_dir / "test-daily-2026-03-15.md"
+    markdown_path.write_text("# Test Report\n", encoding="utf-8")
+
+    try:
+        settings = BackendSettings(
+            db_path=tmp_path / "papers-test.db",
+            tasks_dir=tmp_path / "task-logs",
+            skills_dir=tmp_path / "skills",
+            cors_origins=["*"],
+        )
+
+        path, content = _read_markdown_file(
+            "data/reports/test-daily-2026-03-15.md",
+            allowed_roots=_build_allowed_markdown_roots(settings),
+            not_found_detail="Markdown file not found",
+            read_fail_prefix="Failed to read markdown file",
+        )
+
+        assert path == markdown_path.resolve()
+        assert content == "# Test Report\n"
+    finally:
+        markdown_path.unlink(missing_ok=True)
 
 
 def test_task_flow_for_report_ai_and_stop(tmp_path: Path) -> None:

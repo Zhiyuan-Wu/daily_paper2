@@ -1,5 +1,5 @@
 """Paper recommendation module."""
 
-from service.recommand.recommand_service import PaperRecommandService, Paper_Recommand_Service
+from service.recommand.recommand_service import PaperRecommandService
 
-__all__ = ["PaperRecommandService", "Paper_Recommand_Service"]
+__all__ = ["PaperRecommandService"]

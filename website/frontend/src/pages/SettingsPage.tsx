@@ -58,13 +58,13 @@ export function SettingsPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
   const [logText, setLogText] = useState('');
-  const [logOffset, setLogOffset] = useState(0);
   const [logError, setLogError] = useState<string | null>(null);
   const [logCompleted, setLogCompleted] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [autoScroll, setAutoScroll] = useState(true);
 
   const logContainerRef = useRef<HTMLPreElement | null>(null);
+  const logOffsetRef = useRef(0);
 
   const tasksQuery = useQuery({
     queryKey: ['tasks', taskFilter],
@@ -164,13 +164,13 @@ export function SettingsPage() {
 
     const fetchLogs = async () => {
       try {
-        const chunk = await getTaskLogs(selectedTaskId, logOffset);
+        const chunk = await getTaskLogs(selectedTaskId, logOffsetRef.current);
         if (cancelled) {
           return;
         }
 
         setLogText((current) => (chunk.content ? `${current}${chunk.content}` : current));
-        setLogOffset(chunk.next_offset);
+        logOffsetRef.current = chunk.next_offset;
         setLogCompleted(chunk.completed);
         setLastUpdated(new Date().toLocaleTimeString());
         setLogError(null);
@@ -193,7 +193,7 @@ export function SettingsPage() {
         window.clearInterval(timer);
       }
     };
-  }, [selectedTaskId, logOffset]);
+  }, [selectedTaskId]);
 
   useEffect(() => {
     if (!autoScroll || !logContainerRef.current) {
@@ -247,7 +247,7 @@ export function SettingsPage() {
               onClick: () => {
                 setSelectedTaskId(record.task_id);
                 setLogText('');
-                setLogOffset(0);
+                logOffsetRef.current = 0;
                 setLogCompleted(false);
                 setLogError(null);
                 setLastUpdated('');

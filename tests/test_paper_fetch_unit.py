@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from models.paper import PaperMetadata
 from service.fetch.paper_fetch import PaperFetch
 from service.fetch.sources.base import PaperSource
@@ -176,3 +178,16 @@ def test_search_online_does_not_overwrite_existing_rows(tmp_path: Path) -> None:
     assert persisted.title == "Original Title"
     assert persisted.abstract == "original abstract"
     assert persisted.local_pdf_path == downloaded.local_pdf_path
+
+
+def test_search_online_limit_must_be_positive(tmp_path: Path) -> None:
+    fetch = PaperFetch(
+        db_path=tmp_path / "papers.db",
+        papers_dir=tmp_path / "papers",
+        max_downloaded_papers=10,
+    )
+    dummy = DummySource()
+    fetch.register_source(dummy)
+
+    with pytest.raises(ValueError):
+        fetch.search_online(source="dummy", limit=0)

@@ -7,15 +7,13 @@ import {
   Empty,
   Form,
   Input,
-  Modal,
   Row,
   Select,
   Space,
-  Spin,
   Typography,
   message,
 } from 'antd';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import {
   ApiError,
@@ -27,24 +25,17 @@ import {
   updatePaperNotes,
 } from '../api/client';
 import type { PaperRow } from '../api/types';
-import { MarkdownViewer } from '../components/MarkdownViewer';
+import { PaperAiMarkdownModal } from '../components/PaperAiMarkdownModal';
+import { PaperDetailModal } from '../components/PaperDetailModal';
+import { PaperNoteModal } from '../components/PaperNoteModal';
 import { PaperTable } from '../components/PaperTable';
+import { likeLabel } from '../components/paperUtils';
 
 const SOURCE_OPTIONS = [
   { value: '', label: '全部来源' },
   { value: 'arxiv', label: 'arXiv' },
   { value: 'huggingface', label: 'HuggingFace' },
 ];
-
-function likeLabel(value: -1 | 0 | 1): string {
-  if (value === 1) {
-    return '喜欢';
-  }
-  if (value === -1) {
-    return '不喜欢';
-  }
-  return '无信息';
-}
 
 export function PaperExplorePage() {
   const queryClient = useQueryClient();
@@ -219,64 +210,6 @@ export function PaperExplorePage() {
 
   const detailPaper = detailQuery.data;
 
-  const detailCards = useMemo(() => {
-    if (!detailPaper) {
-      return null;
-    }
-
-    return (
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
-        <Card title="论文信息" size="small">
-          <p>
-            <strong>ID:</strong> {detailPaper.id}
-          </p>
-          <p>
-            <strong>标题:</strong> {detailPaper.title}
-          </p>
-          <p>
-            <strong>作者:</strong> {detailPaper.authors.join(', ') || '-'}
-          </p>
-          <p>
-            <strong>摘要:</strong> {detailPaper.abstract || '-'}
-          </p>
-          <p>
-            <strong>来源:</strong> {detailPaper.source}
-          </p>
-          <p>
-            <strong>发表时间:</strong> {detailPaper.published_at || '-'}
-          </p>
-          <p>
-            <strong>在线链接:</strong> {detailPaper.online_url || '-'}
-          </p>
-          <p>
-            <strong>PDF链接:</strong> {detailPaper.pdf_url || '-'}
-          </p>
-        </Card>
-
-        <Card title="活动信息" size="small">
-          <p>
-            <strong>推荐记录:</strong>{' '}
-            {detailPaper.recommendation_records.length > 0
-              ? detailPaper.recommendation_records.join(', ')
-              : '-'}
-          </p>
-          <p>
-            <strong>用户笔记:</strong> {detailPaper.user_notes || '-'}
-          </p>
-          <p>
-            <strong>偏好:</strong> {likeLabel(detailPaper.like)}
-          </p>
-          <p>
-            <strong>AI摘要:</strong> {detailPaper.ai_report_summary || '-'}
-          </p>
-          <p>
-            <strong>AI报告路径:</strong> {detailPaper.ai_report_path || '-'}
-          </p>
-        </Card>
-      </Space>
-    );
-  }, [detailPaper]);
-
   return (
     <Space direction="vertical" size={18} style={{ width: '100%' }}>
       {contextHolder}
@@ -353,67 +286,38 @@ export function PaperExplorePage() {
         )}
       </Card>
 
-      <Modal
-        title="论文详情"
-        open={Boolean(detailPaperId)}
-        onCancel={() => setDetailPaperId(null)}
-        footer={null}
-        width={900}
-        destroyOnClose
-      >
-        {detailQuery.isLoading ? <Spin /> : null}
-        {detailQuery.error ? (
-          <Alert
-            type="error"
-            showIcon
-            message="详情加载失败"
-            description={(detailQuery.error as Error).message}
-          />
-        ) : null}
-        {detailCards}
-      </Modal>
+      <PaperDetailModal
+        paperId={detailPaperId}
+        paper={detailPaper}
+        loading={detailQuery.isLoading}
+        error={(detailQuery.error as Error) ?? null}
+        onClose={() => setDetailPaperId(null)}
+      />
 
-      <Modal
-        title="添加笔记"
-        open={Boolean(notePaper)}
-        destroyOnClose
+      <PaperNoteModal
+        paper={notePaper}
+        draft={noteDraft}
+        saving={noteMutation.isPending}
+        onDraftChange={setNoteDraft}
         onCancel={() => setNotePaper(null)}
-        onOk={() => {
+        onSave={() => {
           if (!notePaper) {
             return;
           }
           noteMutation.mutate({ paperId: notePaper.id, userNotes: noteDraft });
         }}
-        okText="保存"
-        confirmLoading={noteMutation.isPending}
-      >
-        <Input.TextArea
-          value={noteDraft}
-          rows={8}
-          onChange={(event) => setNoteDraft(event.target.value)}
-          placeholder="输入你的笔记"
-        />
-      </Modal>
+      />
 
-      <Modal
-        title={aiMarkdownPaper ? `AI解读 - ${aiMarkdownPaper.title}` : 'AI解读'}
-        open={Boolean(aiMarkdownPaper)}
-        onCancel={() => {
+      <PaperAiMarkdownModal
+        paper={aiMarkdownPaper}
+        markdownPath={aiMarkdownPath}
+        content={aiMarkdownContent}
+        onClose={() => {
           setAiMarkdownPaper(null);
           setAiMarkdownPath('');
           setAiMarkdownContent('');
         }}
-        footer={null}
-        width={900}
-        destroyOnClose
-      >
-        {aiMarkdownPath ? (
-          <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-            文件路径: {aiMarkdownPath}
-          </Typography.Paragraph>
-        ) : null}
-        <MarkdownViewer content={aiMarkdownContent} />
-      </Modal>
+      />
     </Space>
   );
 }

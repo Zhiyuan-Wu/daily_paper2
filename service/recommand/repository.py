@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
 from models.paper import PaperMetadata
 from models.paper_activity import PaperActivityRecord
+from service.common.sqlite_utils import validate_table_name
 
 
 class PaperRecommandRepository:
@@ -23,8 +25,8 @@ class PaperRecommandRepository:
         activity_table: str = "activity",
     ) -> None:
         self.db_path = Path(db_path)
-        self.paper_table = paper_table
-        self.activity_table = activity_table
+        self.paper_table = validate_table_name(paper_table)
+        self.activity_table = validate_table_name(activity_table)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     @contextmanager
@@ -45,15 +47,22 @@ class PaperRecommandRepository:
             ).fetchone()
             return row is not None
 
-    def list_papers(self) -> list[PaperMetadata]:
+    def list_papers(self, *, fetched_from: datetime | None = None) -> list[PaperMetadata]:
         if not self.table_exists(self.paper_table):
             return []
+        params: list[object] = []
+        where_sql = ""
+        if fetched_from is not None:
+            where_sql = "WHERE fetched_at >= ?"
+            params.append(fetched_from.isoformat())
         with self._conn() as conn:
             rows = conn.execute(
                 f"""
                 SELECT * FROM {self.paper_table}
+                {where_sql}
                 ORDER BY fetched_at DESC, id ASC
-                """
+                """,
+                params,
             ).fetchall()
             return [self._row_to_paper(row) for row in rows]
 

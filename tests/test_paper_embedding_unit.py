@@ -110,9 +110,20 @@ def test_sync_incremental_and_semantic_search(tmp_path: Path, fake_embed_endpoin
         default_batch_size=2,
     )
 
-    version = service.sync_incremental()
-    assert version.processed_paper_count == 2
+    result = service.sync_incremental()
+    assert result.processed_paper_count == 2
+    assert result.embedding_model == "fake-embed"
     assert service.repo.count_embeddings() == 2
+
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+            ("paper_embeddings_vec",),
+        ).fetchone()
+        assert row is not None
+    finally:
+        conn.close()
 
     hits = service.search("llm retrieval", top_k=2)
     assert len(hits) == 2
@@ -154,6 +165,79 @@ def test_incremental_sync_only_processes_new_rows(tmp_path: Path, fake_embed_end
 
     second = service.sync_incremental()
     assert second.processed_paper_count == 1
+    assert service.repo.count_embeddings() == 3
+
+
+def test_incremental_sync_picks_late_backfill_without_force_full(
+    tmp_path: Path, fake_embed_endpoint: str
+) -> None:
+    db_path = tmp_path / "papers.db"
+    _insert_sample_papers(db_path)
+
+    service = PaperEmbeddingService(
+        db_path=db_path,
+        ollama_endpoint=fake_embed_endpoint,
+        ollama_model="fake-embed",
+        default_batch_size=2,
+    )
+
+    first = service.sync_incremental()
+    assert first.processed_paper_count == 2
+
+    repo = PaperRepository(db_path)
+    repo.upsert_papers(
+        [
+            PaperMetadata(
+                id="dummy:late",
+                source="dummy",
+                source_id="late",
+                title="Late backfilled paper",
+                authors=["Late Author"],
+                abstract="old timestamp but newly inserted",
+                online_url="https://example.org/late",
+                fetched_at=datetime(2026, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+                published_at=datetime(2026, 2, 1, 10, 0, 0, tzinfo=timezone.utc),
+                extra={"keywords": ["late"]},
+            )
+        ]
+    )
+
+    second = service.sync_incremental()
+    assert second.processed_paper_count == 1
+    assert service.repo.count_embeddings() == 3
+
+
+def test_incremental_sync_indexes_all_missing_embeddings(tmp_path: Path, fake_embed_endpoint: str) -> None:
+    db_path = tmp_path / "papers.db"
+    repo = PaperRepository(db_path)
+    same_ts = datetime(2026, 3, 2, 10, 0, 0, tzinfo=timezone.utc)
+    repo.upsert_papers(
+        [
+            PaperMetadata(
+                id=f"dummy:{idx}",
+                source="dummy",
+                source_id=str(idx),
+                title=f"Paper {idx}",
+                authors=["Author"],
+                abstract="same fetched_at batch",
+                online_url=f"https://example.org/{idx}",
+                fetched_at=same_ts,
+                published_at=same_ts,
+                extra={"keywords": ["batch"]},
+            )
+            for idx in [1, 2, 3]
+        ]
+    )
+
+    service = PaperEmbeddingService(
+        db_path=db_path,
+        ollama_endpoint=fake_embed_endpoint,
+        ollama_model="fake-embed",
+        default_batch_size=2,
+    )
+
+    result = service.sync_incremental()
+    assert result.processed_paper_count == 3
     assert service.repo.count_embeddings() == 3
 
 
@@ -206,6 +290,7 @@ def test_cli_sync_and_search(tmp_path: Path, fake_embed_endpoint: str) -> None:
     assert sync_proc.returncode == 0, sync_proc.stderr
     sync_payload = json.loads(sync_proc.stdout)
     assert sync_payload["processed_paper_count"] == 2
+    assert "synced_at" in sync_payload
 
     search_cmd = [
         sys.executable,
@@ -234,3 +319,13 @@ def test_cli_sync_and_search(tmp_path: Path, fake_embed_endpoint: str) -> None:
         assert row[0] == 2
     finally:
         conn.close()
+
+
+def test_invalid_embedding_table_name_rejected(tmp_path: Path, fake_embed_endpoint: str) -> None:
+    with pytest.raises(ValueError):
+        PaperEmbeddingService(
+            db_path=tmp_path / "papers.db",
+            embedding_table='paper_embeddings;DROP TABLE papers;',
+            ollama_endpoint=fake_embed_endpoint,
+            ollama_model="fake-embed",
+        )

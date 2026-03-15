@@ -133,6 +133,8 @@ class PaperFetch:
         end = _as_date(end_date)
         keyword_list = _as_keywords(keywords)
         resolved_limit = limit if limit is not None else self.default_online_limit
+        if resolved_limit < 1:
+            raise ValueError("limit must be greater than or equal to 1")
 
         papers = src.search(
             start_date=start,
@@ -255,9 +257,6 @@ class PaperFetch:
             raise ValueError(f"Unsupported source '{source}'. Available: {sorted(self.sources)}")
         return self.sources[source]
 
-
-# Backward-compatible alias for the user requested class name style.
-Paper_Fetch = PaperFetch
 
 
 def _as_keywords(keywords: list[str] | str | None) -> list[str] | None:

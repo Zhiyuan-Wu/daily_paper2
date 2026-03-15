@@ -63,36 +63,23 @@ class PaperEmbeddingRecord:
 
 
 @dataclass(slots=True)
-class PaperEmbeddingVersion:
-    """Version checkpoint for incremental embedding sync."""
+class PaperEmbeddingSyncResult:
+    """Runtime summary for one embedding sync execution."""
 
-    id: int | None
     synced_at: datetime
     max_fetched_at: datetime | None
     processed_paper_count: int
     embedding_model: str
     embedding_dim: int
 
-    def to_db_row(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
-            "id": self.id,
             "synced_at": _to_iso(self.synced_at),
             "max_fetched_at": _to_iso(self.max_fetched_at),
             "processed_paper_count": self.processed_paper_count,
             "embedding_model": self.embedding_model,
             "embedding_dim": self.embedding_dim,
         }
-
-    @classmethod
-    def from_db_row(cls, row: dict[str, Any]) -> "PaperEmbeddingVersion":
-        return cls(
-            id=row.get("id"),
-            synced_at=_from_iso(row.get("synced_at")) or datetime.now(timezone.utc),
-            max_fetched_at=_from_iso(row.get("max_fetched_at")),
-            processed_paper_count=int(row.get("processed_paper_count") or 0),
-            embedding_model=row.get("embedding_model") or "",
-            embedding_dim=int(row.get("embedding_dim") or 0),
-        )
 
 
 @dataclass(slots=True)

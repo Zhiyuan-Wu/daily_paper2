@@ -79,13 +79,13 @@ python scripts/paper_parse_cli.py paper "$PAPER_ID"
 This may take a few minutes. Then verify full text path:
 
 ```bash
-sqlite3 data/papers.db "SELECT paper_id, status, local_text_path FROM paper_parses WHERE id = '$PAPER_ID';"
+sqlite3 data/papers.db "SELECT paper_id, status, local_text_path FROM paper_parses WHERE paper_id = '$PAPER_ID';"
 ```
 
 Suggested shell scaffold:
 
 ```bash
-PARSED_PATH="$(sqlite3 data/papers.db "SELECT COALESCE(local_text_path,'') FROM paper_parses WHERE id = '$PAPER_ID';")"
+PARSED_PATH="$(sqlite3 data/papers.db "SELECT COALESCE(local_text_path,'') FROM paper_parses WHERE paper_id = '$PAPER_ID';")"
 printf "Parsed file: %s\n" "$PARSED_PATH"
 ```
 

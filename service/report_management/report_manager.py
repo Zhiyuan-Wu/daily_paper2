@@ -84,11 +84,6 @@ class DailyReportManager:
     def to_dict(record: PaperReportRecord) -> dict[str, Any]:
         return asdict(record)
 
-
-# Backward-compatible alias for class naming preferences.
-Paper_Report_Manager = DailyReportManager
-
-
 def _as_str(value: Any, key_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"Config '{key_name}' must be a non-empty string")

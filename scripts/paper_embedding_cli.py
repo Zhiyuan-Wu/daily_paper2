@@ -32,7 +32,6 @@ def _build_parser(config_path: str | Path) -> argparse.ArgumentParser:
     parser.add_argument("--config", default=str(config_path))
     parser.add_argument("--db-path", default=cfg["db_path"])
     parser.add_argument("--embedding-table", default=cfg.get("embedding_table", "paper_embeddings"))
-    parser.add_argument("--version-table", default=cfg.get("version_table", "paper_embedding_versions"))
     parser.add_argument("--endpoint", default=ollama_cfg["endpoint"])
     parser.add_argument("--model", default=ollama_cfg["model"])
     parser.add_argument("--timeout", type=int, default=int(ollama_cfg["timeout_seconds"]))
@@ -42,7 +41,6 @@ def _build_parser(config_path: str | Path) -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     sync_cmd = subparsers.add_parser("sync", help="sync paper embeddings incrementally")
-    sync_cmd.add_argument("--limit", type=int)
     sync_cmd.add_argument("--batch-size", type=int)
     sync_cmd.add_argument("--force-full", action="store_true")
 
@@ -70,7 +68,6 @@ def main(argv: list[str] | None = None) -> None:
     service = PaperEmbeddingService(
         db_path=args.db_path,
         embedding_table=args.embedding_table,
-        version_table=args.version_table,
         ollama_endpoint=args.endpoint,
         ollama_model=args.model,
         ollama_timeout=args.timeout,
@@ -81,11 +78,10 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.command == "sync":
         version = service.sync_incremental(
-            limit=args.limit,
             batch_size=args.batch_size,
             force_full=args.force_full,
         )
-        print(json.dumps(version.to_db_row(), ensure_ascii=False, indent=2))
+        print(json.dumps(version.to_dict(), ensure_ascii=False, indent=2))
         return
 
     if args.command == "search":

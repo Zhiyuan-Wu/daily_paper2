@@ -52,6 +52,8 @@ class ArxivPaperSource(PaperSource):
     ) -> list[PaperMetadata]:
         """Query recent arXiv results and normalize into ``PaperMetadata`` objects."""
         resolved_limit = limit if limit is not None else self.default_search_limit
+        if resolved_limit < 1:
+            raise ValueError("limit must be greater than or equal to 1")
         query = str(kwargs.get("query") or "")
         category = kwargs.get("category")
 

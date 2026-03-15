@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from models.paper_activity import PaperActivityRecord
+from service.common.sqlite_utils import validate_table_name
 
 
 class PaperActivityRepository:
@@ -15,7 +16,7 @@ class PaperActivityRepository:
 
     def __init__(self, db_path: str | Path, table_name: str = "activity") -> None:
         self.db_path = Path(db_path)
-        self.table_name = table_name
+        self.table_name = validate_table_name(table_name)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 

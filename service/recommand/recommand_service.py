@@ -257,11 +257,6 @@ class PaperRecommandService:
             )
         return results
 
-
-# Backward-compatible alias for naming style.
-Paper_Recommand_Service = PaperRecommandService
-
-
 def _normalize_score_map(raw: dict[str, float]) -> dict[str, float]:
     normalized: dict[str, float] = {}
     for paper_id, score in raw.items():

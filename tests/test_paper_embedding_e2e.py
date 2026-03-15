@@ -52,8 +52,8 @@ def test_e2e_embedding_sync_search_and_db_state(tmp_path: Path) -> None:
     embedding_service = PaperEmbeddingService(db_path=db_path)
     _ensure_ollama_embedding_available(embedding_service)
 
-    version = embedding_service.sync_incremental(limit=50)
-    assert version.processed_paper_count >= 1
+    result = embedding_service.sync_incremental()
+    assert result.processed_paper_count >= 1
 
     query_text = " ".join(downloaded.title.split()[:8])
     hits = embedding_service.search(
@@ -74,12 +74,6 @@ def test_e2e_embedding_sync_search_and_db_state(tmp_path: Path) -> None:
         assert embedding_row is not None
         assert len(embedding_row[0]) > 20
         assert int(embedding_row[1]) > 0
-
-        version_row = conn.execute(
-            "SELECT COUNT(*) FROM paper_embedding_versions"
-        ).fetchone()
-        assert version_row is not None
-        assert version_row[0] >= 1
 
         paper_row = conn.execute(
             "SELECT local_pdf_path FROM papers WHERE id = ?",

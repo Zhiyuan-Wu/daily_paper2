@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
 from models.paper_report import PaperReportRecord
-
-TABLE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+from service.common.sqlite_utils import validate_table_name
 
 
 class PaperReportRepository:
     """Persistence layer for ``report`` table CRUD."""
 
     def __init__(self, db_path: str | Path, table_name: str = "report") -> None:
-        if not TABLE_NAME_PATTERN.match(table_name):
-            raise ValueError(f"Invalid sqlite table name: {table_name}")
-
         self.db_path = Path(db_path)
-        self.table_name = table_name
+        self.table_name = validate_table_name(table_name)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 

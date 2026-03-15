@@ -208,11 +208,6 @@ class PaperParser:
             return fallback.strip()
         return ""
 
-
-# Backward-compatible alias for requested class naming style.
-Paper_Parser = PaperParser
-
-
 def _to_list(value: Any) -> tuple[list[Any], bool]:
     if isinstance(value, (list, tuple)):
         return list(value), True

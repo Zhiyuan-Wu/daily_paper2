@@ -58,6 +58,8 @@ class HuggingFacePaperSource(PaperSource):
     ) -> list[PaperMetadata]:
         """Search papers by date range and keyword filters."""
         resolved_limit = limit if limit is not None else self.default_search_limit
+        if resolved_limit < 1:
+            raise ValueError("limit must be greater than or equal to 1")
         start = start_date or end_date or date.today()
         end = end_date or start
         if start > end:

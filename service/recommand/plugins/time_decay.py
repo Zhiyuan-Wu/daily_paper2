@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from models.paper_recommand import PaperRecommandRequest
 from service.recommand.plugins.base import RecommendationPlugin, clamp_score, limit_top_k
 from service.recommand.repository import PaperRecommandRepository
@@ -21,7 +23,8 @@ class TimeDecayRecommendationPlugin(RecommendationPlugin):
             return {}
 
         now = request.resolved_now()
-        papers = self.repository.list_papers()
+        window_start = now - timedelta(days=self.freshness_window_days)
+        papers = self.repository.list_papers(fetched_from=window_start)
 
         scores: dict[str, float] = {}
         for paper in papers:

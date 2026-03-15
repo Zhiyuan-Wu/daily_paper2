@@ -7,6 +7,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from models.paper import PaperMetadata
 from models.paper_embedding import PaperSearchHit
 from service.activity_management.activity_manager import PaperActivityManager
@@ -213,3 +215,11 @@ def test_cli_recommend_and_db_state(tmp_path: Path) -> None:
         assert row[0] == 3
     finally:
         conn.close()
+
+
+def test_invalid_table_name_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        PaperRecommandService(
+            db_path=tmp_path / "papers.db",
+            paper_table='papers;DROP TABLE activity;',
+        )

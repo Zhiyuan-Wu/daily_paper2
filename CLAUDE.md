@@ -128,7 +128,7 @@ All services share `data/papers.db` (SQLite with sqlite-vec extension):
 
 React 19 with TypeScript, using:
 - **UI**: Ant Design 5.24
-- **State**: Zustand stores in `website/frontend/src/stores/`
+- **State**: Zustand stores in `website/frontend/src/store/`
 - **Routing**: React Router DOM 7 with routes `/daily-report`, `/paper-explore`, `/settings`
 - **API**: TanStack React Query for data fetching
 - **Markdown**: react-markdown with rehype-katex for math rendering

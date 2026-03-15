@@ -32,7 +32,6 @@ paper_parse:
 paper_embedding:
   db_path: data/papers.db
   embedding_table: paper_embeddings
-  version_table: paper_embedding_versions
   default_top_k: 5
   default_batch_size: 8
   ollama:
