@@ -9,3 +9,4 @@ uvicorn>=0.30.0
 httpx>=0.28.0
 sqlite-vec>=0.1.6
 pysqlite3>=0.5.4
+openai>=1.30.0

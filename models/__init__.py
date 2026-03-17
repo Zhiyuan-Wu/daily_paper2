@@ -1,6 +1,7 @@
 from models.paper import PaperMetadata
 from models.paper_activity import PaperActivityRecord
 from models.paper_embedding import PaperEmbeddingRecord, PaperEmbeddingSyncResult, PaperSearchHit
+from models.paper_extend_metadata import PaperExtendMetadataRecord, PaperExtendMetadataSyncResult
 from models.paper_parse import PaperParseRecord
 from models.paper_recommand import PaperRecommandRequest, PaperRecommendation
 from models.paper_report import PaperReportRecord
@@ -13,6 +14,8 @@ __all__ = [
     "PaperEmbeddingRecord",
     "PaperEmbeddingSyncResult",
     "PaperSearchHit",
+    "PaperExtendMetadataRecord",
+    "PaperExtendMetadataSyncResult",
     "PaperRecommandRequest",
     "PaperRecommendation",
 ]

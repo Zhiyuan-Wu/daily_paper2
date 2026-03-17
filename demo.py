@@ -11,7 +11,8 @@
 7. Hugging Face 指定日期查询（使用配置中的代理）
 8. 下载一篇 Hugging Face 论文到本地（默认优先本地缓存）
 9. 增量构建论文向量库并执行语义检索（PaperEmbeddingService）
-10. 执行推荐（PaperRecommandService：time / interaction / fusion / semantic）
+10. 提取一篇论文的扩展元信息（PaperExtendMetadataService）
+11. 执行推荐（PaperRecommandService：time / interaction / fusion / semantic）
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Iterable
 from models.paper import PaperMetadata
 from service.fetch import PaperFetch
 from service.embedding import PaperEmbeddingService
+from service.extend_metadata import PaperExtendMetadataService
 from service.activity_management import PaperActivityManager
 from service.parse import PaperParser
 from service.recommand import PaperRecommandService
@@ -92,6 +94,20 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             print("  parse_failed={}".format(exc))
 
+        # 2.2) 提取论文扩展元信息（依赖 OCR + OpenAI chat 可用）。
+        try:
+            extend_metadata_service = PaperExtendMetadataService()  # 默认读取根目录 config.yaml
+            extended = extend_metadata_service.get_extended_metadata(downloaded.id)
+            print("\nExtended Metadata:")
+            print(f"  paper_id={extended['paper_id']}")
+            print(f"  abstract_cn={extended['abstract_cn'][:80]}")
+            print(f"  affliations={extended['affliations']}")
+            print(f"  keywords={extended['keywords']}")
+            print(f"  github_repo={extended['github_repo']}")
+        except Exception as exc:  # noqa: BLE001
+            print("\nExtend metadata 提取未成功（通常是 OCR 或 OpenAI chat 服务不可用）：")
+            print(f"  {exc}")
+
     # 3) 为下载论文写入用户活动，供 interaction 推荐算法使用。
     if downloaded:
         activity = activity_manager.create_activity(
@@ -157,11 +173,15 @@ def main() -> None:
     # 7) 论文向量化增量同步 + 语义检索（依赖 Ollama embed 可用）。
     try:
         embedding_service = PaperEmbeddingService()  # 默认读取根目录 config.yaml
-        version = embedding_service.sync_incremental(limit=50)
+        version = embedding_service.sync_incremental()
         print("\nEmbedding Sync:")
-        print(f"  version_id={version.id}")
+        print(f"  synced_at={version.synced_at.isoformat()}")
         print(f"  processed={version.processed_paper_count}")
-        print(f"  max_fetched_at={version.max_fetched_at}")
+        print(
+            "  max_fetched_at={}".format(
+                version.max_fetched_at.isoformat() if version.max_fetched_at else ""
+            )
+        )
         print(f"  model={version.embedding_model}")
         print(f"  embedding_dim={version.embedding_dim}")
 

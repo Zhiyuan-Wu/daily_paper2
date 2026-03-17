@@ -73,6 +73,16 @@ class PaperParser:
             outputs.append(text)
         return outputs if is_batch else outputs[0]
 
+    def parse_pdf_first_page(self, pdf_path: str | Path) -> str:
+        """Parse only the first page of a PDF without persisting parse state."""
+        images = self._convert_pdf_to_images(Path(pdf_path), first_page=1, last_page=1)
+        if not images:
+            raise RuntimeError(f"No first page rendered from PDF: {pdf_path}")
+        text = self.parse_images(images[0])
+        if isinstance(text, list):
+            return text[0].strip() if text else ""
+        return text.strip()
+
     def parse_paper(self, paper_id: str) -> str:
         """Parse a paper by id: db lookup -> pdf OCR -> markdown -> db status."""
         if not self.repo.paper_exists(paper_id):
@@ -127,7 +137,13 @@ class PaperParser:
             chunks.append("")
         return "\n".join(chunks).strip() + "\n", len(page_texts)
 
-    def _convert_pdf_to_images(self, pdf_path: Path) -> list[Any]:
+    def _convert_pdf_to_images(
+        self,
+        pdf_path: Path,
+        *,
+        first_page: int | None = None,
+        last_page: int | None = None,
+    ) -> list[Any]:
         try:
             from pdf2image import convert_from_path
             from pdf2image.exceptions import PDFInfoNotInstalledError, PDFPageCountError, PDFSyntaxError
@@ -135,7 +151,12 @@ class PaperParser:
             raise RuntimeError("Missing dependency 'pdf2image'. Install with: pip install pdf2image") from exc
 
         try:
-            images = convert_from_path(str(pdf_path), dpi=self.pdf_dpi)
+            kwargs: dict[str, Any] = {"dpi": self.pdf_dpi}
+            if first_page is not None:
+                kwargs["first_page"] = first_page
+            if last_page is not None:
+                kwargs["last_page"] = last_page
+            images = convert_from_path(str(pdf_path), **kwargs)
         except PDFInfoNotInstalledError as exc:
             raise RuntimeError(
                 "Poppler is required but not found (pdftoppm missing). "

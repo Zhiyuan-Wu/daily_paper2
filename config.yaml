@@ -39,6 +39,15 @@ paper_embedding:
     model: "qwen3-embedding:0.6b"
     timeout_seconds: 120
 
+paper_extend_metadata:
+  db_path: data/papers.db
+  table_name: extend_metadata
+  openai:
+    base_url: "https://open.bigmodel.cn/api/coding/paas/v4"
+    api_key: ""
+    model: "glm-4.7"
+    timeout_seconds: 120
+
 paper_activity:
   db_path: data/papers.db
   table_name: activity
