@@ -10,8 +10,10 @@ from fastapi.testclient import TestClient
 
 from models.paper import PaperMetadata
 from models.paper_activity import PaperActivityRecord
+from models.paper_extend_metadata import PaperExtendMetadataRecord
 from models.paper_report import PaperReportRecord
 from service.activity_management.repository import PaperActivityRepository
+from service.extend_metadata.repository import PaperExtendMetadataRepository
 from service.fetch.repository import PaperRepository
 from service.report_management.repository import PaperReportRepository
 from website.backend.api import _build_allowed_markdown_roots, _read_markdown_file, create_app
@@ -111,6 +113,17 @@ def _prepare_test_data(
         )
     )
 
+    extend_repo = PaperExtendMetadataRepository(db_path)
+    extend_repo.upsert_record(
+        PaperExtendMetadataRecord(
+            paper_id="arxiv:2603.00001",
+            abstract_cn="这是一篇关于智能体训练的中文摘要。",
+            affliations=["OpenAI", "Tsinghua University"],
+            keywords=["agent", "reasoning"],
+            extracted_at=datetime(2026, 3, 11, 9, 0, tzinfo=timezone.utc),
+        )
+    )
+
     report_repo = PaperReportRepository(db_path)
     report_repo.create(
         PaperReportRecord(
@@ -157,9 +170,13 @@ def test_report_and_markdown_endpoints(tmp_path: Path) -> None:
     assert papers.status_code == 200
     paper_rows = papers.json()
     assert len(paper_rows) == 2
-    assert paper_rows[0]["keywords"] == ["agents", "llm"]
+    assert paper_rows[0]["keywords"] == ["agent", "reasoning"]
+    assert paper_rows[0]["affiliations"] == ["OpenAI", "Tsinghua University"]
+    assert paper_rows[0]["abstract"] == "这是一篇关于智能体训练的中文摘要。"
     assert paper_rows[0]["like"] == 1
-    assert paper_rows[1]["keywords"] == ["cs.SD"]
+    assert paper_rows[1]["keywords"] == []
+    assert paper_rows[1]["affiliations"] == []
+    assert paper_rows[1]["abstract"] == "audio compression"
     assert paper_rows[1]["like"] == 0
 
     markdown = client.get("/api/reports/daily-2026-03-11/markdown")
@@ -211,11 +228,17 @@ def test_explore_detail_notes_like_and_db_update(tmp_path: Path) -> None:
     explore_payload = explore.json()
     assert explore_payload["total"] == 1
     assert explore_payload["items"][0]["id"] == "arxiv:2603.00001"
+    assert explore_payload["items"][0]["keywords"] == ["agent", "reasoning"]
+    assert explore_payload["items"][0]["affiliations"] == ["OpenAI", "Tsinghua University"]
+    assert explore_payload["items"][0]["abstract"] == "这是一篇关于智能体训练的中文摘要。"
 
     detail = client.get("/api/papers/arxiv:2603.00001/detail")
     assert detail.status_code == 200
     assert detail.json()["user_notes"] == "initial note"
     assert detail.json()["like"] == 1
+    assert detail.json()["keywords"] == ["agent", "reasoning"]
+    assert detail.json()["affiliations"] == ["OpenAI", "Tsinghua University"]
+    assert detail.json()["abstract"] == "这是一篇关于智能体训练的中文摘要。"
 
     update = client.patch(
         "/api/activities/arxiv:2603.00001/notes",

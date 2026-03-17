@@ -10,6 +10,7 @@ const SAMPLE_PAPER: PaperRow = {
   title: 'Agentic Critical Training',
   authors: ['Alice'],
   keywords: ['agent', 'llm'],
+  affiliations: ['OpenAI', 'Tsinghua University'],
   published_at: '2026-03-11T10:00:00+00:00',
   source: 'arxiv',
   online_url: 'https://example.org/paper',

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from service.activity_management.repository import PaperActivityRepository
+from service.extend_metadata.repository import PaperExtendMetadataRepository
 from service.report_management.repository import PaperReportRepository
 
 
@@ -21,6 +22,7 @@ class SQLiteDataStore:
 
         # Ensure required tables/indexes exist.
         PaperActivityRepository(self.db_path)
+        PaperExtendMetadataRepository(self.db_path)
         PaperReportRepository(self.db_path)
         self._ensure_papers_compat_columns()
 
@@ -116,6 +118,7 @@ class SQLiteDataStore:
         base_sql = f"""
             FROM papers p
             LEFT JOIN activity a ON a.id = p.id
+            LEFT JOIN extend_metadata e ON e.paper_id = p.id
             {where_sql}
         """
 
@@ -138,6 +141,9 @@ class SQLiteDataStore:
                     p.extra,
                     p.local_pdf_path,
                     p.local_text_path,
+                    e.abstract_cn AS extend_abstract_cn,
+                    e.affliations AS extend_affliations,
+                    e.keywords AS extend_keywords,
                     a.recommendation_records,
                     a.user_notes,
                     a.ai_report_summary,
@@ -173,6 +179,9 @@ class SQLiteDataStore:
                     p.extra,
                     p.local_pdf_path,
                     p.local_text_path,
+                    e.abstract_cn AS extend_abstract_cn,
+                    e.affliations AS extend_affliations,
+                    e.keywords AS extend_keywords,
                     a.recommendation_records,
                     a.user_notes,
                     a.ai_report_summary,
@@ -180,6 +189,7 @@ class SQLiteDataStore:
                     a."like" AS activity_like
                 FROM papers p
                 LEFT JOIN activity a ON a.id = p.id
+                LEFT JOIN extend_metadata e ON e.paper_id = p.id
                 WHERE p.id = ?
                 """,
                 (paper_id,),
@@ -211,6 +221,9 @@ class SQLiteDataStore:
                     p.extra,
                     p.local_pdf_path,
                     p.local_text_path,
+                    e.abstract_cn AS extend_abstract_cn,
+                    e.affliations AS extend_affliations,
+                    e.keywords AS extend_keywords,
                     a.recommendation_records,
                     a.user_notes,
                     a.ai_report_summary,
@@ -218,6 +231,7 @@ class SQLiteDataStore:
                     a."like" AS activity_like
                 FROM papers p
                 LEFT JOIN activity a ON a.id = p.id
+                LEFT JOIN extend_metadata e ON e.paper_id = p.id
                 WHERE p.id IN ({placeholders})
                 """,
                 ids,
@@ -316,20 +330,24 @@ class SQLiteDataStore:
 def _paper_row_to_payload(row: sqlite3.Row) -> dict[str, Any]:
     authors = _json_list(row["authors"])
     extra = _json_object(row["extra"])
-    keywords = _extract_keywords(extra)
+    abstract_cn = (row["extend_abstract_cn"] or "").strip()
+    affiliations = _normalize_string_list(_json_list(row["extend_affliations"]))
+    keywords = _normalize_string_list(_json_list(row["extend_keywords"]))
 
     recommendation_records = _json_list(row["recommendation_records"])
+    original_abstract = row["abstract"] or ""
 
     return {
         "id": row["id"],
         "title": row["title"],
         "authors": authors,
         "keywords": keywords,
+        "affiliations": affiliations,
         "published_at": row["published_at"],
         "source": row["source"],
         "online_url": row["online_url"] or "",
         "pdf_url": row["pdf_url"] or "",
-        "abstract": row["abstract"] or "",
+        "abstract": abstract_cn or original_abstract,
         "extra": extra,
         "local_pdf_path": row["local_pdf_path"],
         "local_text_path": row["local_text_path"],
@@ -349,27 +367,6 @@ def _report_row_to_payload(row: sqlite3.Row) -> dict[str, Any]:
         "related_paper_ids": _json_list(row["related_paper_ids"]),
         "local_md_path": row["local_md_path"] or "",
     }
-
-
-def _extract_keywords(extra: dict[str, Any]) -> list[str]:
-    candidates = [
-        extra.get("keywords"),
-        extra.get("key_words"),
-        extra.get("categories"),
-        extra.get("tags"),
-    ]
-
-    for raw in candidates:
-        if isinstance(raw, list):
-            values = [str(item).strip() for item in raw if str(item).strip()]
-            if values:
-                return values
-        if isinstance(raw, str) and raw.strip():
-            parts = [part.strip() for part in raw.replace(";", ",").split(",") if part.strip()]
-            if parts:
-                return parts
-
-    return []
 
 
 def _json_list(raw: Any) -> list[Any]:
@@ -404,6 +401,15 @@ def _json_object(raw: Any) -> dict[str, Any]:
         if isinstance(parsed, dict):
             return parsed
     return {}
+
+
+def _normalize_string_list(values: list[Any]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        text = str(value).strip()
+        if text:
+            result.append(text)
+    return result
 
 
 def _normalize_like(raw: Any) -> int:

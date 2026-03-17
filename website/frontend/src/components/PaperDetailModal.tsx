@@ -1,4 +1,4 @@
-import { Alert, Card, Modal, Space, Spin } from 'antd';
+import { Alert, Card, Modal, Space, Spin, Tag } from 'antd';
 
 import type { PaperRow } from '../api/types';
 import { likeLabel } from './paperUtils';
@@ -42,6 +42,12 @@ export function PaperDetailModal({
               <strong>作者:</strong> {paper.authors.join(', ') || '-'}
             </p>
             <p>
+              <strong>关键词:</strong> <TagList values={paper.keywords} />
+            </p>
+            <p>
+              <strong>单位:</strong> <TagList values={paper.affiliations} />
+            </p>
+            <p>
               <strong>摘要:</strong> {paper.abstract || '-'}
             </p>
             <p>
@@ -79,5 +85,20 @@ export function PaperDetailModal({
         </Space>
       ) : null}
     </Modal>
+  );
+}
+
+function TagList({ values }: { values: string[] }) {
+  if (values.length === 0) {
+    return null;
+  }
+  return (
+    <>
+      {values.map((value) => (
+        <Tag key={value} style={{ marginInlineEnd: 6, marginBottom: 6 }}>
+          {value}
+        </Tag>
+      ))}
+    </>
   );
 }

@@ -153,16 +153,14 @@ export function PaperTable({
       dataIndex: 'keywords',
       key: 'keywords',
       width: 260,
-      render: (keywords: string[]) =>
-        keywords.length > 0 ? (
-          <Space size={[4, 6]} wrap>
-            {keywords.map((word) => (
-              <Tag key={word}>{word}</Tag>
-            ))}
-          </Space>
-        ) : (
-          '-'
-        ),
+      render: (keywords: string[]) => renderTagList(keywords),
+    },
+    {
+      title: '单位',
+      dataIndex: 'affiliations',
+      key: 'affiliations',
+      width: 320,
+      render: (affiliations: string[]) => renderTagList(affiliations),
     },
     {
       title: '发表时间',
@@ -185,7 +183,7 @@ export function PaperTable({
       loading={loading}
       columns={columns}
       dataSource={papers}
-      scroll={{ x: 1150 }}
+      scroll={{ x: 1450 }}
       pagination={
         onPageChange && total !== undefined && page !== undefined && pageSize !== undefined
           ? {
@@ -201,5 +199,18 @@ export function PaperTable({
       }
       locale={{ emptyText: '暂无论文数据' }}
     />
+  );
+}
+
+function renderTagList(values: string[]) {
+  if (values.length === 0) {
+    return null;
+  }
+  return (
+    <Space size={[4, 6]} wrap>
+      {values.map((value) => (
+        <Tag key={value}>{value}</Tag>
+      ))}
+    </Space>
   );
 }

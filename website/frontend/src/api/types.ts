@@ -3,6 +3,7 @@ export interface PaperRow {
   title: string;
   authors: string[];
   keywords: string[];
+  affiliations: string[];
   published_at: string | null;
   source: string;
   online_url: string;
