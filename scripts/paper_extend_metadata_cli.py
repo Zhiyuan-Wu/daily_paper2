@@ -63,7 +63,6 @@ def _build_parser(config_path: str | Path) -> argparse.ArgumentParser:
     paper_cmd.add_argument("--force-refresh", action="store_true")
 
     sync_cmd = subparsers.add_parser("sync", help="incrementally extract missing extend metadata")
-    sync_cmd.add_argument("--limit", type=int)
     sync_cmd.add_argument("--force-refresh", action="store_true")
 
     return parser
@@ -112,7 +111,6 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     result = service.sync_incremental(
-        limit=args.limit,
         force_refresh=args.force_refresh,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))

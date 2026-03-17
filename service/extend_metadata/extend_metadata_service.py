@@ -112,11 +112,10 @@ class PaperExtendMetadataService:
     def sync_incremental(
         self,
         *,
-        limit: int | None = None,
         force_refresh: bool = False,
     ) -> PaperExtendMetadataSyncResult:
         """Extract extend metadata for papers that do not have records yet."""
-        papers = self.repo.list_papers_for_extension(limit=limit)
+        papers = self.repo.list_papers_for_extension()
         if not papers:
             return PaperExtendMetadataSyncResult(
                 synced_at=_utc_now(),
@@ -132,6 +131,7 @@ class PaperExtendMetadataService:
             try:
                 self.get_extended_metadata(paper.id, force_refresh=force_refresh)
                 processed += 1
+                print(f"Processed paper {paper.id} ({processed}/{len(papers)})")
             except Exception as exc:  # noqa: BLE001
                 failures.append({"paper_id": paper.id, "error": str(exc)})
 
