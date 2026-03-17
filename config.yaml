@@ -65,6 +65,7 @@ paper_recommand:
   db_path: data/papers.db
   paper_table: papers
   activity_table: activity
+  extend_metadata_table: extend_metadata
   default_algorithm: fusion
   default_top_k: 20
   plugins:
@@ -82,4 +83,9 @@ paper_recommand:
     time:
       enabled: true
       freshness_window_days: 30
+      weight: 1.0
+    institution:
+      enabled: true
+      freshness_window_days: 30
+      normalization_cap: 8.0
       weight: 1.0

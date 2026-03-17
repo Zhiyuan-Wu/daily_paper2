@@ -23,6 +23,7 @@ def get_paper_recommand_config(config_path: str | Path | None = None) -> dict[st
         "db_path": db_path,
         "paper_table": "papers",
         "activity_table": "activity",
+        "extend_metadata_table": "extend_metadata",
         "default_algorithm": "fusion",
         "default_top_k": 20,
         "plugins": {
@@ -42,6 +43,12 @@ def get_paper_recommand_config(config_path: str | Path | None = None) -> dict[st
             "time": {
                 "enabled": True,
                 "freshness_window_days": 30,
+                "weight": 1.0,
+            },
+            "institution": {
+                "enabled": True,
+                "freshness_window_days": 30,
+                "normalization_cap": 8.0,
                 "weight": 1.0,
             },
         },

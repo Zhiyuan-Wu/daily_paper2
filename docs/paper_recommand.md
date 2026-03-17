@@ -8,8 +8,9 @@
 2. 语义推荐插件（`semantic`）：接收查询语句，调用 embedding 检索服务返回推荐分数。
 3. 交互推荐插件（`interaction`）：读取 `activity` 表，综合 `like`、`user_notes`、`recommendation_records` 计算分数。
 4. 时间推荐插件（`time`）：读取 `papers.fetched_at`，新论文得分更高，超过窗口后得分为 0。
-5. 融合推荐（`fusion`，默认）：对所有算法结果做并集，缺失算法按 0 分，按配置相对权重归一化后加权平均排序。
-6. 多种用法：支持 Python import 和 CLI。
+5. 机构推荐插件（`institution`）：读取 `extend_metadata.affliations`，对近期论文按预置机构权重打分。
+6. 融合推荐（`fusion`，默认）：对所有算法结果做并集，缺失算法按 0 分，按配置相对权重归一化后加权平均排序。
+7. 多种用法：支持 Python import 和 CLI。
 
 ## 2. 设计原则
 1. 插件解耦：推荐算法与入口服务解耦，便于按需注册/替换。
@@ -24,6 +25,7 @@ paper_recommand:
   db_path: data/papers.db
   paper_table: papers
   activity_table: activity
+  extend_metadata_table: extend_metadata
   default_algorithm: fusion
   default_top_k: 20
   plugins:
@@ -42,18 +44,26 @@ paper_recommand:
       enabled: true
       freshness_window_days: 30
       weight: 1.0
+    institution:
+      enabled: true
+      freshness_window_days: 30
+      normalization_cap: 8.0
+      weight: 1.0
 ```
 
 字段说明：
 1. `db_path`：sqlite 路径。
 2. `paper_table`：论文元信息表，默认 `papers`。
 3. `activity_table`：用户交互表，默认 `activity`。
-4. `default_algorithm`：默认算法，推荐使用 `fusion`。
-5. `default_top_k`：默认推荐条数。
-6. `plugins.semantic.top_k`：语义推荐默认召回条数。
-7. `plugins.<name>.weight`：fusion 中该插件的相对权重（代码内部自动归一化）。
-8. `plugins.interaction.*`：交互推荐加减分权重。
-9. `plugins.time.freshness_window_days`：时间推荐有效窗口天数。
+4. `extend_metadata_table`：扩展元信息表，默认 `extend_metadata`。
+5. `default_algorithm`：默认算法，推荐使用 `fusion`。
+6. `default_top_k`：默认推荐条数。
+7. `plugins.semantic.top_k`：语义推荐默认召回条数。
+8. `plugins.<name>.weight`：fusion 中该插件的相对权重（代码内部自动归一化）。
+9. `plugins.interaction.*`：交互推荐加减分权重。
+10. `plugins.time.freshness_window_days`：时间推荐有效窗口天数。
+11. `plugins.institution.freshness_window_days`：机构推荐仅对最近窗口内论文生效。
+12. `plugins.institution.normalization_cap`：机构原始权重和的固定归一化上限，避免相对归一化导致冷门机构论文虚高。
 
 ## 4. 插件评分逻辑
 
@@ -72,6 +82,13 @@ paper_recommand:
 1. 输入：`papers.fetched_at`。
 2. 打分：在 `freshness_window_days` 内按线性衰减，越新越高。
 3. 超窗：超过窗口的论文得 0 分（不返回）。
+
+### 4.4 institution
+1. 输入：最近窗口内论文对应的 `extend_metadata.affliations`。
+2. 机构库：代码内预置一组知名科技公司与高校的权重，例如 `OpenAI / Google / Microsoft / MIT / Stanford / 清华大学`。
+3. 匹配：对单位名称做规范化后使用模糊匹配，允许命中如 `Department of Computer Science, Stanford University`、`Google DeepMind` 这类扩展写法。
+4. 打分：一篇论文命中的知名机构权重做求和，同一机构只累计一次；未命中机构记 0 分。
+5. 归一化：`score = min(raw_score / normalization_cap, 1.0)`，这里的 `normalization_cap` 是固定上限，不随当前候选集变化。
 
 ## 5. Python API 使用
 ```python
@@ -95,6 +112,13 @@ interaction_rows = service.recommend(algorithm="interaction", top_k=10)
 # 4) 指定时间推荐
 recent_rows = service.recommend(
     algorithm="time",
+    top_k=10,
+    now="2026-03-12T00:00:00+00:00",
+)
+
+# 5) 指定机构推荐
+institution_rows = service.recommend(
+    algorithm="institution",
     top_k=10,
     now="2026-03-12T00:00:00+00:00",
 )
@@ -133,6 +157,14 @@ python scripts/paper_recommand_cli.py recommend --algorithm interaction --top-k 
 ```bash
 python scripts/paper_recommand_cli.py recommend \
   --algorithm time \
+  --top-k 10 \
+  --now 2026-03-12T00:00:00+00:00
+```
+
+6. 机构推荐：
+```bash
+python scripts/paper_recommand_cli.py recommend \
+  --algorithm institution \
   --top-k 10 \
   --now 2026-03-12T00:00:00+00:00
 ```

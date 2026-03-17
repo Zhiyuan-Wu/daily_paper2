@@ -11,6 +11,7 @@ from service.embedding.embedding_service import PaperEmbeddingService
 from service.recommand.config import get_paper_recommand_config
 from service.recommand.plugins import (
     InteractionRecommendationPlugin,
+    InstitutionRecommendationPlugin,
     RecommendationPlugin,
     SemanticSearchRecommendationPlugin,
     TimeDecayRecommendationPlugin,
@@ -27,6 +28,7 @@ class PaperRecommandService:
         db_path: str | Path | None = None,
         paper_table: str | None = None,
         activity_table: str | None = None,
+        extend_metadata_table: str | None = None,
         default_algorithm: str | None = None,
         default_top_k: int | None = None,
         config_path: str | Path | None = None,
@@ -39,6 +41,16 @@ class PaperRecommandService:
             plugin_cfg.get("interaction"), "paper_recommand.plugins.interaction"
         )
         time_cfg = _as_mapping(plugin_cfg.get("time"), "paper_recommand.plugins.time")
+        institution_cfg = _as_mapping(
+            plugin_cfg.get("institution")
+            or {
+                "enabled": True,
+                "freshness_window_days": 30,
+                "normalization_cap": 8.0,
+                "weight": 1.0,
+            },
+            "paper_recommand.plugins.institution",
+        )
 
         self.db_path = Path(db_path or _as_str(cfg.get("db_path"), "paper_recommand.db_path"))
         self.paper_table = paper_table or _as_str(
@@ -46,6 +58,10 @@ class PaperRecommandService:
         )
         self.activity_table = activity_table or _as_str(
             cfg.get("activity_table") or "activity", "paper_recommand.activity_table"
+        )
+        self.extend_metadata_table = extend_metadata_table or _as_str(
+            cfg.get("extend_metadata_table") or "extend_metadata",
+            "paper_recommand.extend_metadata_table",
         )
 
         self.default_algorithm = (default_algorithm or cfg.get("default_algorithm") or "fusion").lower()
@@ -59,6 +75,7 @@ class PaperRecommandService:
             self.db_path,
             paper_table=self.paper_table,
             activity_table=self.activity_table,
+            extend_metadata_table=self.extend_metadata_table,
         )
         self.plugins: dict[str, RecommendationPlugin] = {}
         self.fusion_weights: dict[str, float] = {}
@@ -123,6 +140,27 @@ class PaperRecommandService:
                 fusion_weight=_as_float(
                     time_cfg.get("weight", 1.0),
                     "paper_recommand.plugins.time.weight",
+                ),
+            )
+
+        if _as_bool(
+            institution_cfg.get("enabled"), "paper_recommand.plugins.institution.enabled"
+        ):
+            self.register_plugin(
+                InstitutionRecommendationPlugin(
+                    self.repo,
+                    freshness_window_days=_as_int(
+                        institution_cfg.get("freshness_window_days") or 30,
+                        "paper_recommand.plugins.institution.freshness_window_days",
+                    ),
+                    normalization_cap=_as_float(
+                        institution_cfg.get("normalization_cap") or 8.0,
+                        "paper_recommand.plugins.institution.normalization_cap",
+                    ),
+                ),
+                fusion_weight=_as_float(
+                    institution_cfg.get("weight", 1.0),
+                    "paper_recommand.plugins.institution.weight",
                 ),
             )
 

@@ -11,7 +11,9 @@ import pytest
 
 from models.paper import PaperMetadata
 from models.paper_embedding import PaperSearchHit
+from models.paper_extend_metadata import PaperExtendMetadataRecord
 from service.activity_management.activity_manager import PaperActivityManager
+from service.extend_metadata.repository import PaperExtendMetadataRepository
 from service.fetch.repository import PaperRepository
 from service.recommand import PaperRecommandService
 
@@ -76,6 +78,23 @@ def _seed_papers(db_path: Path, now: datetime | None = None) -> list[PaperMetada
     ]
     PaperRepository(db_path).upsert_papers(papers)
     return papers
+
+
+def _seed_extend_metadata(
+    db_path: Path,
+    rows: dict[str, list[str]],
+    extracted_at: datetime | None = None,
+) -> None:
+    repo = PaperExtendMetadataRepository(db_path)
+    current = extracted_at or datetime.now(timezone.utc)
+    for paper_id, affiliations in rows.items():
+        repo.upsert_record(
+            PaperExtendMetadataRecord(
+                paper_id=paper_id,
+                affliations=affiliations,
+                extracted_at=current,
+            )
+        )
 
 
 def test_semantic_plugin_recommend_scores(tmp_path: Path) -> None:
@@ -143,6 +162,88 @@ def test_time_plugin_decay(tmp_path: Path) -> None:
 
     assert "dummy:1" in ids
     assert "dummy:3" not in ids
+
+
+def test_institution_plugin_scores_recent_papers_by_affiliation(tmp_path: Path) -> None:
+    db_path = tmp_path / "papers.db"
+    now = datetime(2026, 3, 12, 12, 0, 0, tzinfo=timezone.utc)
+    _seed_papers(db_path, now=now)
+    _seed_extend_metadata(
+        db_path,
+        {
+            "dummy:1": [
+                "Department of Computer Science, Stanford University",
+                "Google DeepMind",
+            ],
+            "dummy:2": ["Unknown Neighborhood Lab"],
+            "dummy:3": ["Tsinghua University"],
+        },
+        extracted_at=now,
+    )
+
+    service = PaperRecommandService(db_path=db_path)
+    rows = service.recommend(algorithm="institution", top_k=5, now=now.isoformat())
+
+    assert "institution" in service.list_algorithms()
+    assert [row.paper.id for row in rows] == ["dummy:1"]
+    assert rows[0].score == pytest.approx((2.5 + 2.8) / 8.0)
+
+
+def test_institution_plugin_uses_fixed_normalization_cap_from_config(tmp_path: Path) -> None:
+    db_path = tmp_path / "papers.db"
+    now = datetime(2026, 3, 12, 12, 0, 0, tzinfo=timezone.utc)
+    _seed_papers(db_path, now=now)
+    _seed_extend_metadata(
+        db_path,
+        {
+            "dummy:1": ["OpenAI", "Stanford University"],
+            "dummy:2": ["Some Unknown Lab"],
+        },
+        extracted_at=now,
+    )
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        f"""
+paper_recommand:
+  db_path: {db_path}
+  paper_table: papers
+  activity_table: activity
+  extend_metadata_table: extend_metadata
+  default_algorithm: institution
+  default_top_k: 20
+  plugins:
+    semantic:
+      enabled: false
+      top_k: 20
+      weight: 1.0
+    interaction:
+      enabled: false
+      like_weight: 0.45
+      note_weight: 0.55
+      dislike_penalty: 0.4
+      recommended_penalty: 0.08
+      weight: 1.0
+    time:
+      enabled: false
+      freshness_window_days: 30
+      weight: 1.0
+    institution:
+      enabled: true
+      freshness_window_days: 30
+      normalization_cap: 10.0
+      weight: 1.0
+""".strip(),
+        encoding="utf-8",
+    )
+
+    service = PaperRecommandService(config_path=config_path)
+    rows = service.recommend(top_k=5, now=now.isoformat())
+
+    assert len(rows) == 1
+    assert rows[0].paper.id == "dummy:1"
+    assert rows[0].score == pytest.approx((3.0 + 2.5) / 10.0)
+    assert rows[0].score < 1.0
 
 
 def test_fusion_averages_with_missing_scores(tmp_path: Path) -> None:

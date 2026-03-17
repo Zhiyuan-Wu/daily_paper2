@@ -23,10 +23,12 @@ class PaperRecommandRepository:
         *,
         paper_table: str = "papers",
         activity_table: str = "activity",
+        extend_metadata_table: str = "extend_metadata",
     ) -> None:
         self.db_path = Path(db_path)
         self.paper_table = validate_table_name(paper_table)
         self.activity_table = validate_table_name(activity_table)
+        self.extend_metadata_table = validate_table_name(extend_metadata_table)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     @contextmanager
@@ -90,6 +92,28 @@ class PaperRecommandRepository:
                 f"SELECT * FROM {self.activity_table} ORDER BY id ASC"
             ).fetchall()
             return [self._row_to_activity(row) for row in rows]
+
+    def get_affiliations_by_paper_ids(self, paper_ids: list[str]) -> dict[str, list[str]]:
+        if not paper_ids or not self.table_exists(self.extend_metadata_table):
+            return {}
+
+        placeholders = ", ".join(["?"] * len(paper_ids))
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT paper_id, affliations
+                FROM {self.extend_metadata_table}
+                WHERE paper_id IN ({placeholders})
+                """,
+                paper_ids,
+            ).fetchall()
+            result: dict[str, list[str]] = {}
+            for row in rows:
+                paper_id = row["paper_id"]
+                if not isinstance(paper_id, str) or not paper_id.strip():
+                    continue
+                result[paper_id] = _safe_json_list(row["affliations"])
+            return result
 
     @staticmethod
     def _row_to_paper(row: sqlite3.Row) -> PaperMetadata:
