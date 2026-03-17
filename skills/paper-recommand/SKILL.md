@@ -5,7 +5,7 @@ description: Describe the best practice and useful tools for downloading recent 
 
 # Daily Paper Report Workflow
 
-Objective: build a persona-driven daily report. First infer user profile from `activity` likes/notes, then fetch latest papers using that profile, refresh embedding index, run recommendations, pick one featured paper, generate final report, persist report row, and write recommendation records into `activity`.
+Objective: build a persona-driven daily report. First infer user profile from `activity` likes/notes, then fetch latest papers using that profile, incrementally refresh extended metadata, refresh embedding index, run recommendations, pick one featured paper, generate final report, persist report row, and write recommendation records into `activity`.
 
 ## Prerequisites
 
@@ -17,6 +17,7 @@ source .venv/bin/activate
 CLI Tools you can use:
 - **paper_fetch_cli**: search online paper or download a specific paper.
 - **paper_parse_cli**: parse a pdf file into a markdown text file using OCR.
+- **paper_extend_metadata_cli**: extract or incrementally sync extended metadata such as Chinese abstract, affiliations, and keywords.
 - **paper_activity_cli**: CRUD for recording user notes / generated analysis etc. related to a paper.
 - **paper_report_cli**: CRUD for recording generated daily reports arctifact.
 - **paper_embedding_cli**: incremental vector sync and semantic search.
@@ -108,7 +109,18 @@ python scripts/paper_fetch_cli.py search-online \
 
 (*Note: Refer to docs/paper_fetch.md for detail CLI usage, e.g., arxiv `--extra category=cs.AI`*) 
 
-## Step 3: Update Embedding Vector DB After New Metadata
+## Step 3: Incrementally Refresh Extended Metadata
+
+Action:
+1. Run incremental sync for newly fetched papers before rebuilding embeddings:
+
+```bash
+python scripts/paper_extend_metadata_cli.py sync
+```
+
+2. Verify output contains `processed_paper_count`.
+
+## Step 4: Update Embedding Vector DB After New Metadata
 
 Action:
 1. Run incremental sync for new papers:
@@ -119,7 +131,7 @@ python scripts/paper_embedding_cli.py sync
 
 2. Verify output contains `processed_paper_count`.
 
-## Step 4: Persona-Driven Recommendation and Featured Selection
+## Step 5: Persona-Driven Recommendation and Featured Selection
 
 Use `PROFILE_QUERY` from Step 1:
 
@@ -145,7 +157,7 @@ Required sections in `$OVERVIEW_MD`:
 3. Recommended list (with brief rationale per item).
 4. Selection rationale for featured paper.
 
-## Step 5: Download and Parse Featured Paper
+## Step 6: Download and Parse Featured Paper
 
 Replace `<TARGET_PAPER_ID>` with the selected paper id.
 
@@ -156,14 +168,14 @@ python scripts/paper_parse_cli.py paper <TARGET_PAPER_ID>
 
 (*Note: Refer to docs/paper_parse.md for detail CLI usage.*) 
 
-## Step 6: Deep Dive Analysis
+## Step 7: Deep Dive Analysis
 
 Action:
 1. For each `<TARGET_PAPER_ID>`, Spawn a subwokflow (subagent if possible) executing `skills/paper-analysis/SKILL.md`. This suppose to generate deep dive analysis report for each target paper at `data/analysis/paper_analysis_<paper_id>_<YYYY-MM-DD>.md`
 
 (*Note: You can ask to safely skip download/parse status check in paper-analysis workflow, as you just did them.*) 
 
-## Step 7: Compose Final Daily Report
+## Step 8: Compose Final Daily Report
 
 Action: merge overview + deep dive into one final report markdown.
 
@@ -175,7 +187,7 @@ Required structure:
 2. Today's overview
 3. Featured paper deep analysis
 
-## Step 8: Write Recommendation Records into Activity
+## Step 9: Write Recommendation Records into Activity
 
 For each paper id in `RELATED_PAPER_IDS`, append one recommendation timestamp:
 
@@ -186,7 +198,7 @@ print(datetime.now(timezone.utc).isoformat())
 PY
 )"
 
-# Replace with comma-separated ids from Step 4 output, e.g.:
+# Replace with comma-separated ids from Step 5 output, e.g.:
 # RELATED_PAPER_IDS_CSV="arxiv:2603.00001,arxiv:2603.00002,arxiv:2603.00003"
 RELATED_PAPER_IDS_CSV="<RELATED_PAPER_IDS_CSV>"
 IFS=',' read -r -a RELATED_IDS <<< "$RELATED_PAPER_IDS_CSV"
@@ -200,7 +212,7 @@ done
 
 (*Note: `append-recommendation` auto-creates missing activity rows.*)
 
-## Step 9: Create Report Row in SQLite via Report CLI
+## Step 10: Create Report Row in SQLite via Report CLI
 
 Rules:
 1. `report_id` must include today's date, example: `daily-2026-03-12`.
@@ -227,7 +239,7 @@ PY
 
 (*Note: Refer to docs/paper_report.md for detail CLI usage.*)
 
-## Step 10: Cleanup Temp Workspace
+## Step 11: Cleanup Temp Workspace
 
 ```bash
 rm -rf "$TMP_DIR"
