@@ -27,6 +27,10 @@ class GenerateReportRequest(BaseModel):
     report_date: str | None = None
 
 
+class DocsQuestionRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=20_000)
+
+
 class StopTaskResponse(BaseModel):
     task: dict[str, Any]
 
@@ -129,6 +133,24 @@ def create_app(
 
         try:
             command, metadata, task_type = app.state.command_builder.build_report_generation(report_date)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        task = app.state.task_manager.create_task(
+            task_type=task_type,
+            command=command,
+            metadata=metadata,
+        )
+        return {"task_id": task["task_id"], "status": task["status"], "task": task}
+
+    @app.post("/api/tasks/docs-question")
+    def create_docs_question_task(payload: DocsQuestionRequest) -> dict[str, Any]:
+        question = payload.question.strip()
+        if not question:
+            raise HTTPException(status_code=422, detail="question must not be empty")
+
+        try:
+            command, metadata, task_type = app.state.command_builder.build_docs_question(question)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

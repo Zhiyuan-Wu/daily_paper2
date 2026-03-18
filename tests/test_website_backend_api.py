@@ -53,6 +53,23 @@ class FakeCommandBuilder:
         metadata = {"paper_id": paper_id, "skill_file_path": "/fake/paper-analysis/SKILL.md"}
         return command, metadata, "paper_analysis"
 
+    def build_docs_question(self, question: str):
+        command = [
+            sys.executable,
+            "-c",
+            (
+                "import time; "
+                f"print({question!r}, flush=True); "
+                "time.sleep(0.1); "
+                "print('docs-question-done', flush=True)"
+            ),
+        ]
+        metadata = {
+            "question_preview": question[:120],
+            "docs_path": "/docs",
+        }
+        return command, metadata, "docs_question"
+
 
 def _prepare_test_data(
     tmp_path: Path,
@@ -344,3 +361,29 @@ def test_task_flow_for_report_ai_and_stop(tmp_path: Path) -> None:
     running = client.get("/api/tasks", params={"status": "running"})
     assert running.status_code == 200
     assert all(item["status"] == "running" for item in running.json())
+
+
+def test_docs_question_task_flow(tmp_path: Path) -> None:
+    client, _, _ = _prepare_test_data(tmp_path)
+
+    res = client.post(
+        "/api/tasks/docs-question",
+        json={"question": "How do I use the existing CLI to fetch papers?"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["task"]["task_type"] == "docs_question"
+    assert payload["task"]["metadata"]["question_preview"] == "How do I use the existing CLI to fetch papers?"
+    assert payload["task"]["metadata"]["docs_path"] == "/docs"
+
+    task_id = payload["task_id"]
+    status = _wait_for_terminal(client, task_id)
+    assert status == "success"
+
+    logs = client.get(f"/api/tasks/{task_id}/logs", params={"offset": 0})
+    assert logs.status_code == 200
+    assert "How do I use the existing CLI to fetch papers?" in logs.json()["content"]
+
+    invalid = client.post("/api/tasks/docs-question", json={"question": "   "})
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"] == "question must not be empty"

@@ -234,8 +234,10 @@ class SkillCommandBuilder:
 
     def build_report_generation(self, report_date: str) -> tuple[list[str], dict[str, Any], str]:
         skill_path = self.skills_dir / "paper-recommand" / "SKILL.md"
-        prompt = f"Today is {report_date}."
-        command = self._build_claude_command(skill_path, prompt)
+        prompt = (f"Execute workflow in {skill_path}. "
+                  f"Today is {report_date}."
+        )
+        command = self._build_prompt_command(prompt)
         metadata = {
             "report_date": report_date,
             "skill_file_path": str(skill_path),
@@ -244,22 +246,38 @@ class SkillCommandBuilder:
 
     def build_paper_analysis(self, paper_id: str) -> tuple[list[str], dict[str, Any], str]:
         skill_path = self.skills_dir / "paper-analysis" / "SKILL.md"
-        prompt = f"Target Paper is {paper_id}."
-        command = self._build_claude_command(skill_path, prompt)
+        prompt = (f"Execute workflow in {skill_path}. "
+                  f"Target Paper is {paper_id}."
+        )
+        command = self._build_prompt_command(prompt)
         metadata = {
             "paper_id": paper_id,
             "skill_file_path": str(skill_path),
         }
         return command, metadata, "paper_analysis"
 
-    @staticmethod
-    def _build_claude_command(skill_path: Path, prompt: str = "") -> list[str]:
-        if not skill_path.exists():
-            raise FileNotFoundError(f"Skill file not found: {skill_path}")
+    def build_docs_question(self, question: str) -> tuple[list[str], dict[str, Any], str]:
+        prompt = (
+            "Read CLI documents in /docs, use existing tools to help user, "
+            f"do not edit and code. Use question: {question}"
+        )
+        command = self._build_prompt_command(prompt)
+        metadata = {
+            "question_preview": _truncate_text(question, limit=120),
+            "docs_path": "/docs",
+        }
+        return command, metadata, "docs_question"
 
-        _prompt = f"Execute workflow in {skill_path}. {prompt}"
-        return ["claude", "-p", _prompt, "--permission-mode", "bypassPermissions"]
+    @staticmethod
+    def _build_prompt_command(prompt: str) -> list[str]:
+        return ["claude", "-p", prompt, "--permission-mode", "bypassPermissions"]
 
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _truncate_text(value: str, *, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 3]}..."

@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Empty,
+  Input,
   Modal,
   Segmented,
   Space,
@@ -16,7 +17,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { getTaskLogs, getTasks, stopTask } from '../api/client';
+import { createDocsQuestionTask, getTaskLogs, getTasks, stopTask } from '../api/client';
 import type { TaskRecord } from '../api/types';
 
 const STATUS_COLOR: Record<TaskRecord['status'], string> = {
@@ -53,9 +54,12 @@ function formatDuration(seconds: number): string {
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [messageApi, contextHolder] = message.useMessage();
+  const { TextArea } = Input;
 
   const [taskFilter, setTaskFilter] = useState<'running' | 'all'>('running');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
+  const [questionText, setQuestionText] = useState('');
 
   const [logText, setLogText] = useState('');
   const [logError, setLogError] = useState<string | null>(null);
@@ -80,6 +84,29 @@ export function SettingsPage() {
     },
     onError: (error: Error) => {
       messageApi.error(`停止任务失败: ${error.message}`);
+    },
+  });
+
+  const openTaskLogs = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setLogText('');
+    logOffsetRef.current = 0;
+    setLogCompleted(false);
+    setLogError(null);
+    setLastUpdated('');
+  };
+
+  const docsQuestionMutation = useMutation({
+    mutationFn: (question: string) => createDocsQuestionTask(question),
+    onSuccess: (payload) => {
+      messageApi.success(`Claude 任务已提交: ${payload.task_id}`);
+      setIsQuestionModalOpen(false);
+      setQuestionText('');
+      openTaskLogs(payload.task_id);
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (error: Error) => {
+      messageApi.error(`创建 Claude 任务失败: ${error.message}`);
     },
   });
 
@@ -214,6 +241,9 @@ export function SettingsPage() {
 
       <Card>
         <Space style={{ marginBottom: 12 }} wrap>
+          <Button type="primary" onClick={() => setIsQuestionModalOpen(true)}>
+            提问 Claude
+          </Button>
           <Segmented
             value={taskFilter}
             onChange={(value) => setTaskFilter(value as 'running' | 'all')}
@@ -244,18 +274,47 @@ export function SettingsPage() {
             scroll={{ x: 1080 }}
             pagination={{ pageSize: 20, showSizeChanger: false }}
             onRow={(record) => ({
-              onClick: () => {
-                setSelectedTaskId(record.task_id);
-                setLogText('');
-                logOffsetRef.current = 0;
-                setLogCompleted(false);
-                setLogError(null);
-                setLastUpdated('');
-              },
+              onClick: () => openTaskLogs(record.task_id),
             })}
           />
         )}
       </Card>
+
+      <Modal
+        title="提问 Claude"
+        open={isQuestionModalOpen}
+        confirmLoading={docsQuestionMutation.isPending}
+        okText="发送"
+        cancelText="取消"
+        onCancel={() => {
+          if (docsQuestionMutation.isPending) {
+            return;
+          }
+          setIsQuestionModalOpen(false);
+        }}
+        onOk={() => {
+          const trimmed = questionText.trim();
+          if (!trimmed) {
+            messageApi.warning('请输入问题');
+            return;
+          }
+          docsQuestionMutation.mutate(trimmed);
+        }}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">
+            Claude 会读取 `/docs` 下的 CLI 文档，并在不改代码的前提下回答你的问题。
+          </Typography.Text>
+          <TextArea
+            value={questionText}
+            onChange={(event) => setQuestionText(event.target.value)}
+            placeholder="请输入你的问题"
+            rows={6}
+            maxLength={20_000}
+            showCount
+          />
+        </Space>
+      </Modal>
 
       <Modal
         title={selectedTaskId ? `任务日志 - ${selectedTaskId}` : '任务日志'}

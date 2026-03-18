@@ -70,6 +70,13 @@ export function generateReport(reportDate: string): Promise<CreateTaskResponse> 
   });
 }
 
+export function createDocsQuestionTask(question: string): Promise<CreateTaskResponse> {
+  return request<CreateTaskResponse>('/api/tasks/docs-question', {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  });
+}
+
 export function getExplorePapers(params: {
   page: number;
   pageSize: number;
