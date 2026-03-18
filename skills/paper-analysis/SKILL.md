@@ -29,6 +29,7 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/paper-analysis-${SAFE_PAPER_ID}-XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 REPORT_MD="data/analysis/paper_analysis_${SAFE_PAPER_ID}_${TODAY}.md"
+TECHNICAL_MD="$TMP_DIR/technical_manual.md"
 QUESTIONS_MD="$TMP_DIR/questions.md"
 ANALYSIS_MD="$TMP_DIR/analysis.md"
 mkdir -p data/analysis
@@ -89,7 +90,29 @@ PARSED_PATH="$(sqlite3 data/papers.db "SELECT COALESCE(local_text_path,'') FROM 
 printf "Parsed file: %s\n" "$PARSED_PATH"
 ```
 
-## Step 3: Propose Analysis Questions (Question Set)
+## Step 3: Generate Technical Manual for Minimal Reproduction
+
+Action:
+1. Read the parsed full text from `$PARSED_PATH` carefully before asking review questions.
+2. Generate a standalone technical manual markdown at: `$TECHNICAL_MD`.
+3. The technical manual must describe the paper as a **minimum reproducible implementation manual**, not a high-level summary.
+
+Required contents:
+1. Problem setup, notation, assumptions, and target outputs.
+2. Full method pipeline explanation from input data to final outputs, including stage-by-stage data flow and module interaction.
+3. Complete method decomposition: each component/module/block, what it consumes, what it produces, and why it is needed.
+4. Necessary formulas and derivations: preserve original notation when useful, explain variable meaning, and provide concise derivation or reasoning for key equations/objectives where required for reproduction.
+5. Training procedure: data construction, preprocessing, optimization objective, loss terms, sampling strategy, important hyperparameters, and implementation constraints.
+6. Inference / evaluation procedure: decoding, ranking, retrieval, post-processing, metrics, and protocol details.
+7. Reproduction checklist: what is fully specified, what must be inferred, and what ambiguities or missing details remain.
+8. Design statements: explicitly state the core design choices, engineering tradeoffs, and why the pipeline is structured this way according to the paper evidence.
+
+Quality bar:
+1. The document must retain enough technical detail for a strong engineer/researcher to implement the closest possible minimal version of the original paper.
+2. Do not omit equations, pipeline steps, or implementation-critical details just because they are tedious.
+3. When the paper leaves details ambiguous, mark them explicitly as inferred assumptions instead of presenting them as confirmed facts.
+
+## Step 4: Propose Analysis Questions (Question Set)
 
 Create question file as you are a top-tier paper reviewer, for example:
 
@@ -113,7 +136,7 @@ cat > "$QUESTIONS_MD" <<'EOF'
 EOF
 ```
 
-## Step 4: Analyze Full Text Against Questions
+## Step 5: Analyze Full Text Against Questions
 
 Action:
 1. Read full text markdown from parsed path.
@@ -121,28 +144,30 @@ Action:
 3. Write/Append structured analysis to `$ANALYSIS_MD`.
 
 
-## Step 5: Repeat Question - Answer Loop for Deeper Analysis 
+## Step 6: Repeat Question - Answer Loop for Deeper Analysis 
 
 Action:
-1. Go to Step3 for another round deeper questions (especaily paper-related questions rather than general review questions).
+1. Go to Step4 for another round deeper questions (especaily paper-related questions rather than general review questions).
 2. quit loop if no further question required or looped > 5 times.
 
 
-## Step 6: Generate Final Paper Interpretation Markdown
+## Step 7: Generate Final Paper Interpretation Markdown
 
 Action: 
-1. Read `$PARSED_PATH`, `$QUESTIONS_MD` and `$ANALYSIS_MD`.
+1. Read `$PARSED_PATH`, `$TECHNICAL_MD`, `$QUESTIONS_MD` and `$ANALYSIS_MD`.
 2. summarize all findings into a **Chinese** final report markdown at: `$REPORT_MD`.
+3. The final report must preserve the key technical details required for **minimum reproduction** of the paper, instead of only keeping high-level conclusions.
 
 Required sections:
 1. Background and target problem.
 2. Limitations of prior work.
 3. Core motivation and method breakdown.
-4. Quantitative results and conclusion.
-5. Valuable QA result and comments.
-6. Next step suggestion or any new ideas.
+4. Minimal reproducible technical details: keep the critical pipeline, formulas/objectives, component responsibilities, training/inference procedure, and implementation-sensitive design choices from `$TECHNICAL_MD`.
+5. Quantitative results and conclusion.
+6. Valuable QA result and comments.
+7. Next step suggestion or any new ideas.
 
-## Step 7: Persist AI Fields to Activity Table
+## Step 8: Persist AI Fields to Activity Table
 
 Prepare a one-line summary string (<= 300 chars), then write to activity.
 
@@ -169,7 +194,7 @@ Verify write-back:
 python scripts/paper_activity_cli.py get "$PAPER_ID"
 ```
 
-## Step 8: Cleanup Temp Workspace
+## Step 9: Cleanup Temp Workspace
 
 ```bash
 rm -rf "$TMP_DIR"
@@ -178,5 +203,5 @@ trap - EXIT
 
 Deliverables:
 1. Interpretation markdown: `data/analysis/paper_analysis_<paper_id>_<YYYY-MM-DD>.md`
-2. `activity.ai_report_summary` updated
-3. `activity.ai_report_path` updated
+3. `activity.ai_report_summary` updated
+4. `activity.ai_report_path` updated

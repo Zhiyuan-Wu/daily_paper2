@@ -85,7 +85,7 @@ Action:
 
 ## Step 2: Fetch Latest Metadata with Persona Query (Last 7 Days)
 
-Use `PROFILE_KEYWORDS` from Step 1:
+Use `PROFILE_KEYWORDS` from Step 1, fetch at least 30 papers from multiple sources (e.g., arXiv, HuggingFace) published in the last 7 days. Repeat fetching with different combinations of keywords if needed.
 
 ```bash
 python scripts/paper_fetch_cli.py search-online \
